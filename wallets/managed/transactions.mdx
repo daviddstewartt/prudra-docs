@@ -1,0 +1,120 @@
+---
+title: "View transaction history"
+description: "List inbound and outbound transactions for a managed wallet or child address."
+---
+
+## View transaction history
+
+The transactions endpoint returns a paginated list of all transactions for a managed wallet or child address — both inbound (deposits received) and outbound (transfers sent).
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard support for viewing transaction history is coming soon. Use the SDK or cURL to query transactions.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { listTransactions } from '@prudra/wallet';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+// List all transactions for a master wallet
+const { data, total } = await listTransactions({
+  walletId:   'mwt_clx1abc123',
+  walletType: 'master',
+  limit:      50,
+});
+
+for (const tx of data) {
+  console.log(`${tx.direction} | ${tx.amount} ${tx.tokenSymbol} | ${tx.status}`);
+}
+
+// List only inbound transactions
+const inbound = await listTransactions({
+  walletId:   'mwt_clx1abc123',
+  walletType: 'master',
+  direction:  'inbound',
+});
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+# All transactions
+curl "https://api.prudra.dev/wallet-infra/master-wallets/mwt_clx1abc123/transactions?limit=50" \
+  -H "Authorization: Bearer prv_test_sk_..."
+
+# Inbound only
+curl "https://api.prudra.dev/wallet-infra/master-wallets/mwt_clx1abc123/transactions?direction=inbound" \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+{
+  "data": [
+    {
+      "id":           "wtx_clx1abc123",
+      "walletId":     "mwt_clx1abc123",
+      "direction":    "inbound",
+      "tokenSymbol":  "USDC",
+      "amount":       "10.50",
+      "rawAmount":    "10500000",
+      "chain":        "base",
+      "txHash":       "0xabc...",
+      "from":         "0xSender...",
+      "to":           "0x742d35Cc...",
+      "status":       "confirmed",
+      "confirmedAt":  "2026-04-30T09:00:00.000Z",
+      "createdAt":    "2026-04-30T08:59:58.000Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Transaction fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Transaction record ID. Prefix: `wtx_` |
+| `walletId` | string | The wallet this transaction belongs to |
+| `direction` | string | `"inbound"` (deposit received) or `"outbound"` (transfer sent) |
+| `tokenSymbol` | string | Token ticker, e.g. `"USDC"` |
+| `amount` | string | Human-readable amount with decimals |
+| `rawAmount` | string | Amount in base units |
+| `chain` | string | Chain name |
+| `txHash` | string | On-chain transaction hash. Verify on a block explorer. |
+| `from` | string | Sender address |
+| `to` | string | Recipient address |
+| `status` | string | `"confirmed"` or `"pending"` |
+| `confirmedAt` | string | ISO timestamp when the transaction was confirmed (null if pending) |
+| `createdAt` | string | ISO timestamp when the record was created |
+
+## Status values
+
+| Status | Meaning |
+|---|---|
+| `confirmed` | Transaction is confirmed on-chain |
+| `pending` | Transaction submitted but not yet confirmed (typically a bridge in progress) |
+
+## Query parameters
+
+| Parameter | Description |
+|---|---|
+| `direction` | Filter by `"inbound"` or `"outbound"` |
+| `limit` | Results per page. Default: 50, max: 500 |
+
+## Next steps
+
+- [Send a transfer](/wallets/transfers/send) — send funds from this wallet
+- [Track a transfer](/wallets/transfers/track-status) — monitor pending transactions
+- [Webhooks](/webhooks/event-reference) — `deposit.success` fires on confirmed inbound transactions

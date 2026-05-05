@@ -1,0 +1,82 @@
+---
+title: "Choose between x402 and MPP"
+description: "A decision guide for agents and developers choosing which payment protocol to use."
+---
+
+## Choose between x402 and MPP
+
+Both protocols achieve the same result: an agent pays for API access, the server verifies, work is done, results are stored. The choice of protocol depends on the agent's wallet type, the chain it uses, and whether session payments are needed.
+
+## Decision table
+
+| If you need... | x402 | MPP | Recommendation |
+|---|---|---|---|
+| Base chain (USDC) | ✓ | — | x402 |
+| Tempo chain (USDC.e) | — | ✓ | MPP |
+| Off-chain signing (no gas for agent) | ✓ | — | x402 |
+| On-chain settlement first | — | ✓ | MPP |
+| Session payments | — | ✓ | MPP |
+| Maximum agent compatibility | ✓ | ✓ | Dual-protocol |
+| Simple one-off request | ✓ | ✓ | Either |
+| Coinbase AgentKit | ✓ | — | x402 |
+| Tempo-native agent | — | ✓ | MPP |
+
+## Protocol comparison
+
+| | x402 | MPP |
+|---|---|---|
+| **Chain** | Base | Tempo |
+| **Token** | USDC | USDC.e |
+| **Agent signs** | Off-chain ERC-3009 (no gas) | On-chain transaction (gas cost) |
+| **Settlement timing** | Async (server submits after response) | Sync (agent submits before request) |
+| **Challenge header** | `PAYMENT-REQUIRED` | `WWW-Authenticate` |
+| **Credential header** | `PAYMENT-SIGNATURE` | `Authorization: Payment` |
+| **Session payments** | No | Yes |
+| **Standard** | x402 Foundation | IETF Internet Draft |
+
+## For developers: use dual-protocol
+
+As a developer building an API, use dual-protocol (the default). You don't need to pick — your endpoint accepts both. The agent picks the protocol that matches its wallet.
+
+```typescript
+// This is all you need — works with x402 and MPP agents
+app.post('/analyse',
+  payMiddleware({ price: '0.01', description: 'Analysis' }),
+  vaultMiddleware(),
+  handler
+);
+```
+
+The only case where you'd want to restrict to one protocol is if your organisation only has a wallet on one chain. If your wallet is on Base, only x402 payments can settle there. If your wallet is on Tempo, only MPP payments can settle there. With dual-protocol configured and a wallet on each chain, you accept both.
+
+## For agents: picking the right protocol
+
+An agent picks a protocol based on which challenge headers it can process and which wallet it has:
+
+```typescript
+const hasX402Challenge = response.headers.has('payment-required');
+const hasMPPChallenge  = response.headers.has('www-authenticate');
+const agentHasBaseWallet  = true; // agent's capability
+const agentHasTempoWallet = false;
+
+if (hasX402Challenge && agentHasBaseWallet) {
+  // Use x402 — sign ERC-3009 and submit PAYMENT-SIGNATURE
+} else if (hasMPPChallenge && agentHasTempoWallet) {
+  // Use MPP — send Tempo transaction and submit Authorization: Payment
+} else {
+  throw new Error('Agent cannot pay — no compatible wallet for available protocols');
+}
+```
+
+## Why Prudra defaults to dual-protocol
+
+The agent payment ecosystem is young and fragmented. Some agents support x402, some MPP, some both. A server that only supports one protocol excludes agents that can only use the other.
+
+Dual-protocol eliminates this fragmentation problem for the developer. The challenge generation overhead is negligible — both challenges are built in one atomic call. The benefit (full agent compatibility) far outweighs the cost (a second header in the 402 response).
+
+## Related
+
+- [Dual-protocol overview](/payments/dual-protocol/overview) — how both challenges fit in one response
+- [How challenges are built](/payments/dual-protocol/challenge) — atomic challenge generation
+- [x402 overview](/payments/x402/overview) — x402 in depth
+- [MPP overview](/payments/mpp/overview) — MPP in depth

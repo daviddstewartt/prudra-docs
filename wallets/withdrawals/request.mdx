@@ -1,0 +1,119 @@
+---
+title: "Request a withdrawal"
+description: "Full API reference for initiating a crypto-to-fiat withdrawal via bank wire."
+---
+
+## Request a withdrawal
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard withdrawal requests are coming soon. Use the SDK or cURL.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import { initialise, Token, Chain } from '@prudra/core';
+import { withdraw } from '@prudra/wallet';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const withdrawal = await withdraw({
+  fromWalletId:   'mwt_clx1abc123',
+  fromWalletType: 'master',
+  amount:         '100.00',
+  token:          Token.USDC,
+  chain:          Chain.BASE,
+  bankAccountId:  'bank_clx1abc123',
+  reference:      'WD-001',
+});
+
+console.log(withdrawal.id);             // 'wdr_clx1abc123'
+console.log(withdrawal.status);         // 'pending_conversion'
+console.log(withdrawal.txHash);         // on-chain tx to Prudra exchange
+console.log(withdrawal.estimatedDays);  // 2
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X POST https://api.prudra.dev/withdrawals \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fromWalletId":   "mwt_clx1abc123",
+    "fromWalletType": "master",
+    "amount":         "100.00",
+    "token":          "USDC",
+    "chain":          "base",
+    "bankAccountId":  "bank_clx1abc123",
+    "reference":      "WD-001"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id":            "wdr_clx1abc123",
+  "walletId":      "mwt_clx1abc123",
+  "amount":        "100.00",
+  "token":         "USDC",
+  "chain":         "base",
+  "bankAccountId": "bank_clx1abc123",
+  "reference":     "WD-001",
+  "status":        "pending_conversion",
+  "txHash":        "0xabc...",
+  "estimatedDays": 2,
+  "createdAt":     "2026-04-30T09:00:00.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `fromWalletId` | string | Yes | Managed wallet or child address ID |
+| `fromWalletType` | `'master'` \| `'child'` | Yes | Source wallet type |
+| `amount` | string | Yes | Amount to withdraw as decimal string |
+| `token` | Token | Yes | Token to withdraw (currently USDC) |
+| `chain` | Chain | Yes | Chain the tokens are on |
+| `bankAccountId` | string | No | Registered bank account ID — if omitted, Prudra ops contacts you |
+| `reference` | string | No | Your reference number for the withdrawal |
+
+## Without a bank account
+
+You can withdraw without a pre-registered bank account. Omit `bankAccountId` and Prudra ops will contact you to arrange wire details:
+
+```typescript
+const withdrawal = await withdraw({
+  fromWalletId:   'mwt_clx1abc123',
+  fromWalletType: 'master',
+  amount:         '500.00',
+  token:          Token.USDC,
+  chain:          Chain.BASE,
+  reference:      'WD-002-MANUAL',
+  // No bankAccountId
+});
+// Prudra ops emails you at your account email with wire instructions
+```
+
+## Error handling
+
+| Error | Status | Cause | Resolution |
+|---|---|---|---|
+| `insufficient-balance` | 422 | Not enough tokens | Check balance first |
+| `below-minimum` | 422 | Amount below minimum ($50) | Increase amount |
+| `bank-account-not-found` | 404 | Bank account ID invalid | Re-check or register account |
+| `currency-mismatch` | 422 | Bank account currency not supported for this chain | Use USD/GBP/EUR account |
+
+## Related
+
+- [Add a bank account](/wallets/withdrawals/bank-account) — register destination bank
+- [Track a withdrawal](/wallets/withdrawals/track) — monitor withdrawal status
+- [Currencies and limits](/wallets/withdrawals/currencies) — minimum amounts and currencies

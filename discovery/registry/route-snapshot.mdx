@@ -1,0 +1,86 @@
+---
+title: "Route snapshot"
+description: "The route snapshot format and how payMiddleware captures route metadata automatically."
+---
+
+## Route snapshot
+
+A route snapshot is the record the registry stores for each payment-protected endpoint. It captures everything an agent needs to know to make a payment.
+
+## Snapshot format
+
+```json
+{
+  "id":          "reg_clx1abc123",
+  "orgId":       "org_clx1abc123",
+  "route":       "/api/generate",
+  "method":      "POST",
+  "price":       "0.10",
+  "token":       "USDC",
+  "chain":       "base",
+  "chainId":     8453,
+  "protocols":   ["x402", "mpp"],
+  "description": "Generate a report from uploaded data",
+  "walletId":    "mwt_clx1abc123",
+  "snapshotAt":  "2026-04-30T09:00:00.000Z"
+}
+```
+
+## How snapshots are captured
+
+`payMiddleware` captures the snapshot automatically. The `description` comes from your middleware configuration:
+
+```typescript
+app.post(
+  '/api/generate',
+  walletMiddleware({ walletId: 'mwt_clx1abc123' }),
+  payMiddleware({
+    price:       '0.10',
+    description: 'Generate a report from uploaded data',  // ← appears in registry
+  }),
+  vaultMiddleware(),
+  handler,
+);
+```
+
+If you omit `description`, the registry entry will have no description — agents see only the route path and price.
+
+## Submitting manually
+
+You can also submit a snapshot manually if you want to pre-register a route before it receives traffic:
+
+```bash
+curl -X POST https://api.prudra.dev/registry \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "route":       "/api/generate",
+    "method":      "POST",
+    "price":       "0.10",
+    "token":       "USDC",
+    "chain":       "base",
+    "protocols":   ["x402", "mpp"],
+    "description": "Generate a report from uploaded data"
+  }'
+```
+
+## Snapshot fields
+
+| Field | Type | Description |
+|---|---|---|
+| `route` | string | Normalised route path |
+| `method` | string | HTTP method |
+| `price` | string | Price as decimal string |
+| `token` | string | Token symbol (`USDC`) |
+| `chain` | string | Chain name |
+| `chainId` | number | Chain ID |
+| `protocols` | string[] | `x402`, `mpp`, or both |
+| `description` | string | Human-readable description of what the route does |
+| `walletId` | string | Wallet receiving payment |
+| `snapshotAt` | string | ISO timestamp of last snapshot |
+
+## Related
+
+- [Registry overview](/discovery/registry/overview) — how registration works
+- [Query routes](/discovery/registry/query-routes) — discover routes
+- [Accept a payment](/payments/accept-a-payment) — payMiddleware with description

@@ -1,0 +1,80 @@
+---
+title: "Members"
+description: "Invite team members, manage roles, and remove access from your Prudra organisation."
+---
+
+## Members
+
+Organisation members share access to all resources in the organisation (wallets, vaults, API keys, webhooks). Roles control what each member can do.
+
+## Roles
+
+| Role | Permissions |
+|---|---|
+| `owner` | Full access — billing, members, API keys, all resources |
+| `admin` | All resources — cannot manage billing or remove the owner |
+| `member` | Read and write access to resources — cannot manage members or API keys |
+| `viewer` | Read-only access to all resources |
+
+## Invite a member
+
+<Tabs>
+  <Tab title="Dashboard">
+    Go to **Settings → Team** and enter the email address to invite.
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X POST https://api.prudra.dev/organisations/current/members \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "colleague@example.com",
+    "role":  "admin"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id":        "mem_clx1abc123",
+  "email":     "colleague@example.com",
+  "role":      "admin",
+  "status":    "invited",
+  "invitedAt": "2026-04-30T09:00:00.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## List members
+
+```bash
+curl https://api.prudra.dev/organisations/current/members \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+## Update a member's role
+
+```bash
+curl -X PATCH https://api.prudra.dev/organisations/current/members/mem_clx1abc123 \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "role": "viewer" }'
+```
+
+## Remove a member
+
+```bash
+curl -X DELETE https://api.prudra.dev/organisations/current/members/mem_clx1abc123 \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Removing a member immediately revokes their access. Any API keys they created are not automatically revoked — revoke them separately if needed.
+
+## Related
+
+- [API keys](/platform/organisations/api-keys) — manage API key access
+- [Organisations overview](/platform/organisations/overview) — organisation concepts

@@ -1,0 +1,80 @@
+---
+title: "MPP payments"
+description: "The IETF Monetization Payment Protocol — on-chain Tempo transactions with standard HTTP auth headers."
+---
+
+## MPP payments
+
+MPP (Monetization Payment Protocol) is an IETF Internet Draft that uses standard HTTP authentication headers to carry payment credentials. Unlike x402, where the agent signs off-chain and the server settles, MPP requires the agent to send a real on-chain transaction first, then prove it by passing the transaction hash to the server.
+
+MPP settles on the Tempo blockchain using USDC.e. It uses the standard `WWW-Authenticate` and `Authorization` HTTP headers, making it compatible with standard HTTP authentication libraries.
+
+## The challenge and response headers
+
+**Challenge (in 402 response):**
+
+```
+WWW-Authenticate: Payment
+  id="ch_abc123",
+  realm="your-api.com",
+  method="tempo",
+  intent="charge",
+  request="eyJhbW91bnQiOiIxMDAwMCI..."
+```
+
+The `request` field is a base64url-encoded JSON object containing payment details (amount, recipient address, chain ID). The `id` field is an HMAC-SHA256 of all challenge parameters — used to verify the challenge wasn't tampered with.
+
+**Agent response (in re-submission):**
+
+```
+Authorization: Payment eyJpZCI6ImNoX2FiYzEyMyIsInR4SGFzaCI6IjB4YWJjLi4uIiwiZnJvbSI6IjB4QWdlbnQuLi4iLCJjaGFpbklkIjo0MjE3fQ==
+```
+
+The `Authorization` header value is a base64url-encoded JSON credential:
+
+```json
+{
+  "id": "ch_abc123",
+  "txHash": "0xabc...",
+  "from": "0xAgentWallet...",
+  "chainId": 4217
+}
+```
+
+## When to use MPP
+
+| Scenario | Recommendation |
+|---|---|
+| Agents on Tempo using USDC.e | MPP or dual-protocol |
+| Multi-step workflows (sessions) | MPP (session payments are MPP-only) |
+| Maximum compatibility | Dual-protocol (both x402 and MPP) |
+| Base + USDC agents | x402 instead |
+
+MPP is required for [session payments](/payments/sessions/overview). If you need one payment to cover a multi-step workflow, use MPP.
+
+## Tokens and chains
+
+MPP currently supports:
+
+| Token | Chain | Chain ID |
+|---|---|---|
+| USDC.e | Tempo | 4217 |
+| USDC.e | Tempo testnet | See testnet config |
+
+## Session payments
+
+MPP supports session payments — one payment covers an entire multi-step workflow. After the first payment, the server issues a session ID. Subsequent requests include the session ID and skip payment verification, all accumulating results in the same vault.
+
+See [Session payments](/payments/sessions/overview) for the full setup.
+
+## Tempo chain specifics
+
+Tempo uses Simplex Consensus — no block reorganisations. Prudra requires only 1 confirmation before considering a Tempo transaction settled. This means MPP payment latency is typically under 2 seconds from the agent's transaction to the server's 200 response.
+
+## Related
+
+- [How MPP works](/payments/mpp/how-it-works) — the Tempo transaction and HMAC verification flow
+- [Add MPP to an endpoint](/payments/mpp/add-to-endpoint) — configure payMiddleware for MPP
+- [Test MPP payments](/payments/mpp/test) — the MPP agent test script
+- [Handle the Authorization header](/payments/mpp/authorization) — parse and validate MPP credentials
+- [Session payments](/payments/sessions/overview) — one payment per multi-step workflow

@@ -1,0 +1,81 @@
+---
+title: "Delete a vault"
+description: "Explicitly delete a vault, free quota, and purge all associated documents and files."
+---
+
+## Delete a vault
+
+Deleting a vault immediately purges all its documents, files, and events and frees the vault slot from your quota. Use deletion to explicitly clean up vaults you no longer need, or to free persisted vault quota.
+
+<Tabs>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { deleteVault } from '@prudra/vault';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+await deleteVault({ vaultId: 'vlt_clx1abc123' });
+console.log('Vault deleted — all contents purged');
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X DELETE https://api.prudra.dev/vaults/vlt_clx1abc123 \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+{
+  "id":        "vlt_clx1abc123",
+  "deleted":   true,
+  "deletedAt": "2026-04-30T09:10:00.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## What deletion removes
+
+| Content | Removed |
+|---|---|
+| Vault metadata record | Yes |
+| Documents | Yes |
+| File GCS objects | Yes |
+| CDN cache entries | Yes (within minutes) |
+| Vault events | Yes |
+| Webhook delivery logs | No (kept for audit) |
+
+Deletion is permanent and irreversible. There is no soft-delete or recycle bin.
+
+## When to delete
+
+- You have processed results and no longer need the vault
+- You've hit persisted vault quota and need to free a slot
+- Cleaning up test vaults in development
+
+## Active vaults delete automatically
+
+Active vaults expire automatically at the end of their TTL — you don't need to delete them. Explicit deletion is most useful for persisted vaults where you want to free the persisted quota slot.
+
+## Deleting an active vault
+
+You can delete a vault in any state, including `active`. This is destructive — if work is in progress, it is cancelled and the vault's contents are lost.
+
+## Error handling
+
+| Error | Status | Cause | Resolution |
+|---|---|---|---|
+| `vault-not-found` | 404 | Vault ID doesn't exist or already deleted | No action needed |
+
+## Related
+
+- [Vault quota](/storage/vaults/quota) — monitor your quota
+- [Persist a vault](/storage/vaults/persist) — prevent auto-expiry instead of deleting
+- [TTL and expiry](/storage/vaults/ttl-expiry) — automatic expiry behaviour

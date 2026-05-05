@@ -1,0 +1,94 @@
+---
+title: "Vault quota"
+description: "Monitor active and persisted vault counts against plan limits."
+---
+
+## Vault quota
+
+Prudra enforces two separate vault quotas: active vault count and persisted vault count. Both are checked at creation/persist time and return a 429 error when exceeded.
+
+## Check your quota
+
+<Tabs>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { getVaultQuota } from '@prudra/vault';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const quota = await getVaultQuota();
+console.log(quota.active.used);       // 12
+console.log(quota.active.limit);      // 50
+console.log(quota.persisted.used);    // 3
+console.log(quota.persisted.limit);   // 20
+console.log(quota.storageBytes.used); // 104857600
+console.log(quota.storageBytes.limit);// 10737418240
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl https://api.prudra.dev/vaults/quota \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+{
+  "active": {
+    "used":  12,
+    "limit": 50
+  },
+  "persisted": {
+    "used":  3,
+    "limit": 20
+  },
+  "storageBytes": {
+    "used":  104857600,
+    "limit": 10737418240
+  }
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Plan quotas
+
+| Quota | Hobby | Pro | Enterprise |
+|---|---|---|---|
+| Active vaults | 3 | 50 | Unlimited |
+| Persisted vaults | 1 | 20 | Unlimited |
+| Total storage | 500 MB | 10 GB | Unlimited |
+| Documents per vault | 50 | Unlimited | Unlimited |
+| Files per vault | 5 | 100 | Unlimited |
+| Max file size | 10 MB | 100 MB | 1 GB |
+
+`-1` in the API response means unlimited.
+
+## When quotas are exceeded
+
+| Quota | Error on exceed | Resolution |
+|---|---|---|
+| Active vaults | `vault-quota-exceeded` (429) | Seal and let vaults expire, or delete them |
+| Persisted vaults | `persisted-vault-quota-exceeded` (429) | Delete old persisted vaults |
+| Total storage | `storage-quota-exceeded` (429) | Delete vaults with large files |
+| Documents per vault | `documents-per-vault-exceeded` (422) | Consolidate documents |
+| Files per vault | `files-per-vault-exceeded` (422) | Remove unnecessary files |
+
+## Active vaults vs persisted vaults
+
+Active vaults expire automatically — once sealed and past their TTL, they stop counting toward your active quota. Persisted vaults count permanently until you delete them.
+
+If your Hobby plan quota is 1 persisted vault and you want to persist a second vault, delete the first.
+
+## Related
+
+- [Create a vault](/storage/vaults/create) — respects active vault quota
+- [Persist a vault](/storage/vaults/persist) — respects persisted vault quota
+- [Delete a vault](/storage/vaults/delete) — free quota
+- [Platform billing](/platform/billing/overview) — upgrade plan for higher quotas

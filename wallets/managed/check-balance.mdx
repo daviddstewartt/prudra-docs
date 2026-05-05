@@ -1,0 +1,114 @@
+---
+title: "Check a wallet balance"
+description: "Query token balances for a managed master wallet or child address."
+---
+
+## Check a wallet balance
+
+The balance endpoint returns current token balances for a managed wallet or child address. Balances are retrieved in real time from the blockchain RPC.
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard support for viewing wallet balances is coming soon. Use the SDK or cURL to query balances.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { getBalance } from '@prudra/wallet';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+// Check master wallet balance
+const balances = await getBalance({
+  walletId:   'mwt_clx1abc123',
+  walletType: 'master',
+});
+
+if (balances.length === 0) {
+  console.log('Wallet has no balance yet — send funds to:', wallet.address);
+} else {
+  for (const balance of balances) {
+    console.log(`${balance.tokenSymbol}: ${balance.formattedBalance} on ${balance.chain}`);
+    // e.g. "USDC: 10.50 on base"
+  }
+}
+
+// Check child address balance
+const childBalances = await getBalance({
+  walletId:   'caddr_clx1def456',
+  walletType: 'child',
+});
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+# Master wallet balances
+curl https://api.prudra.dev/wallet-infra/master-wallets/mwt_clx1abc123/balances \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+[
+  {
+    "tokenSymbol":      "USDC",
+    "tokenAddress":     "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "rawBalance":       "10500000",
+    "formattedBalance": "10.50",
+    "chain":            "base",
+    "chainId":          8453,
+    "decimals":         6
+  }
+]
+```
+
+Empty response (wallet unfunded):
+
+```json
+[]
+```
+
+  </Tab>
+</Tabs>
+
+## Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `tokenSymbol` | string | Token ticker, e.g. `"USDC"`, `"USDT"` |
+| `tokenAddress` | string | The ERC-20 contract address for this token |
+| `rawBalance` | string | Balance in token base units (e.g. `"10500000"` for 10.5 USDC with 6 decimals) |
+| `formattedBalance` | string | Human-readable balance with decimal point (e.g. `"10.50"`) |
+| `chain` | string | Chain name (e.g. `"base"`) |
+| `chainId` | number | Numeric chain ID |
+| `decimals` | number | Token decimals (USDC: 6, most others: 18) |
+
+An empty array means the wallet has not yet received any funds, or the supported tokens haven't been sent.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `walletId` | string | Yes | The wallet ID (`mwt_...`) or child address ID (`caddr_...`) |
+| `walletType` | string | Yes | `"master"` or `"child"` |
+
+## What an empty balance means
+
+If `balances` is an empty array:
+- The wallet address has not received any funds yet
+- Or funds were sent in a token not listed in `supportedTokens`
+- Or the RPC is temporarily unable to retrieve the balance
+
+To fund a wallet, send tokens to the `address` field of the wallet object.
+
+## Next steps
+
+- [View transaction history](/wallets/managed/transactions) — see all inbound and outbound transactions
+- [Send a transfer](/wallets/transfers/send) — move funds out of this wallet
+- [Request a withdrawal](/wallets/withdrawals/request) — convert to fiat and wire to bank

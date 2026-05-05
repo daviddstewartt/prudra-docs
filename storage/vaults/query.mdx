@@ -1,0 +1,105 @@
+---
+title: "Query vaults"
+description: "Retrieve vault metadata, list documents and files, and get the full manifest."
+---
+
+## Query vaults
+
+Read vault contents using the vault ID. All read operations work on active, sealed, and persisted vaults. Expired vaults return 404.
+
+## Get vault metadata
+
+<Tabs>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { getVault } from '@prudra/vault';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const vault = await getVault({ vaultId: 'vlt_clx1abc123' });
+console.log(vault.id);        // 'vlt_clx1abc123'
+console.log(vault.status);    // 'sealed'
+console.log(vault.summary);   // 'Analysis complete'
+console.log(vault.expiresAt); // ISO timestamp
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl https://api.prudra.dev/vaults/vlt_clx1abc123 \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+{
+  "id":        "vlt_clx1abc123",
+  "status":    "sealed",
+  "label":     "CSV analysis job",
+  "summary":   "Analysed 1,234 rows",
+  "sealedAt":  "2026-04-30T09:05:00.000Z",
+  "expiresAt": "2026-05-01T09:00:00.000Z",
+  "createdAt": "2026-04-30T09:00:00.000Z",
+  "documents": [
+    { "id": "doc_clx1abc123", "label": "Analysis result", "createdAt": "..." }
+  ],
+  "files": [
+    { "id": "fil_clx1abc123", "name": "data.csv", "url": "https://assets.prudra.dev/...", "createdAt": "..." }
+  ]
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Get the full manifest
+
+The manifest includes all documents with their data and all files with their CDN URLs:
+
+```typescript
+import { getVaultManifest } from '@prudra/vault';
+
+const manifest = await getVaultManifest({ vaultId: 'vlt_clx1abc123' });
+
+for (const doc of manifest.documents) {
+  console.log(doc.label, doc.data);
+}
+
+for (const file of manifest.files) {
+  console.log(file.name, file.url);  // CDN URL for download
+}
+```
+
+When using `vaultMiddleware`, `req.vault.getManifest()` returns the same data:
+
+```typescript
+const manifest = await req.vault!.getManifest();
+res.json({
+  documents: manifest.documents,
+  files:     manifest.files,
+});
+```
+
+## Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Vault ID (`vlt_...`) |
+| `status` | string | `active`, `sealed`, `persisted`, or `expired` |
+| `label` | string | Human-readable label from creation |
+| `summary` | string | Summary provided when sealing |
+| `sealedAt` | string | ISO timestamp of sealing, null if still active |
+| `expiresAt` | string | ISO timestamp of expiry, null if persisted |
+| `createdAt` | string | ISO timestamp of creation |
+| `documents` | array | List of document stubs (full data in manifest) |
+| `files` | array | List of file stubs with CDN URLs |
+
+## Related
+
+- [Create a vault](/storage/vaults/create) — vault creation
+- [Access control](/storage/vaults/access-control) — share read access with clients
+- [Files](/storage/files/overview) — file download details

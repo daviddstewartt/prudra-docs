@@ -1,0 +1,94 @@
+---
+title: "Agent webhooks"
+description: "Receive payment confirmation and vault events in your agent's webhook endpoint."
+---
+
+## Agent webhooks
+
+If your agent has a persistent webhook endpoint, register it to receive real-time notifications when payments are received, vaults are sealed, or deposits arrive.
+
+<Note>
+  Webhooks require **Pro or Enterprise** plan.
+</Note>
+
+## Register your agent's webhook
+
+```bash
+curl -X POST https://api.prudra.dev/webhooks \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url":    "https://your-agent.example.com/webhooks/prudra",
+    "events": ["payment.received", "vault.sealed", "deposit.success"]
+  }'
+```
+
+Save the returned `secret` as `PRUDRA_WEBHOOK_SECRET`.
+
+## Handle payment.received
+
+When a client pays your agent's endpoint, `payment.received` fires:
+
+```typescript
+import { verifyWebhook } from '@prudra/webhooks';
+
+app.post('/webhooks/prudra', express.raw({ type: '*/*' }), (req, res) => {
+  res.sendStatus(200);  // respond immediately
+
+  const isValid = verifyWebhook({
+    payload:   req.body as Buffer,
+    signature: req.headers['x-prudra-signature'] as string,
+    timestamp: req.headers['x-prudra-timestamp'] as string,
+    secret:    process.env.PRUDRA_WEBHOOK_SECRET!,
+  });
+
+  if (!isValid) return;
+
+  const event = JSON.parse((req.body as Buffer).toString());
+
+  if (event.type === 'payment.received') {
+    const { vaultId, amount, protocol } = event.payload;
+    console.log(`Payment: $${amount} via ${protocol}`);
+    // Trigger your agent's downstream processing
+    processPayment(vaultId);
+  }
+
+  if (event.type === 'vault.sealed') {
+    const { vaultId, summary } = event.payload;
+    console.log(`Work complete: ${summary}`);
+    // Notify end users, send emails, update your DB, etc.
+  }
+});
+```
+
+## Handle deposit.success (for BYO wallets)
+
+If your agent monitors a BYO wallet for incoming funds:
+
+```typescript
+if (event.type === 'deposit.success') {
+  const { walletId, amount, tokenSymbol, txHash } = event.payload;
+  console.log(`Deposit: ${amount} ${tokenSymbol}`);
+  // Top up agent balance, trigger sweep, etc.
+}
+```
+
+## Idempotency
+
+Always check whether you've already processed an event before acting — retries deliver the same `eventId`:
+
+```typescript
+const { eventId, type, payload } = event;
+
+const alreadyProcessed = await db.processedEvents.has(eventId);
+if (alreadyProcessed) return;
+
+await db.processedEvents.add(eventId);
+await handleEvent(type, payload);
+```
+
+## Related
+
+- [Webhooks overview](/webhooks/overview) — full webhook documentation
+- [Verify signatures](/webhooks/verify-signatures) — HMAC verification
+- [Event reference](/webhooks/event-reference) — all event payloads

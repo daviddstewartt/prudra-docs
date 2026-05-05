@@ -1,0 +1,135 @@
+---
+title: "Upload files"
+description: "Upload binary files to a vault and get CDN-delivered download URLs."
+---
+
+## Upload files
+
+Upload a file buffer to a vault using `vault.addFile()`. Prudra stores the file in GCS and returns a CDN URL at `assets.prudra.dev`.
+
+## Upload via vaultMiddleware
+
+```typescript
+import multer from 'multer';
+import { walletMiddleware, payMiddleware, vaultMiddleware } from '@prudra/express';
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+app.post(
+  '/process-file',
+  walletMiddleware({ walletId: 'mwt_clx1abc123' }),
+  payMiddleware({ price: '0.10', description: 'File processing' }),
+  vaultMiddleware(),
+  upload.single('file'),
+  async (req, res) => {
+    const vault = req.vault!;
+
+    // Upload the submitted file
+    const file = await vault.addFile(
+      req.file!.buffer,
+      req.file!.originalname,
+      req.file!.mimetype,
+    );
+
+    // Upload a generated file (e.g., a PDF result)
+    const pdfBuffer = await generatePDF(req.file!.buffer);
+    const result = await vault.addFile(pdfBuffer, 'report.pdf', 'application/pdf');
+
+    await vault.seal('Processing complete');
+
+    res.json({
+      vaultId:     vault.id,
+      originalUrl: file.url,
+      reportUrl:   result.url,
+    });
+  }
+);
+```
+
+## Upload via API
+
+<Tabs>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { uploadFileToVault } from '@prudra/vault';
+import { readFileSync } from 'fs';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const buffer = readFileSync('./data.csv');
+
+const file = await uploadFileToVault({
+  vaultId:  'vlt_clx1abc123',
+  buffer,
+  fileName: 'data.csv',
+  mimeType: 'text/csv',
+});
+
+console.log(file.id);   // 'fil_clx1abc123'
+console.log(file.url);  // 'https://assets.prudra.dev/...'
+console.log(file.name); // 'data.csv'
+console.log(file.size); // bytes
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X POST https://api.prudra.dev/vaults/vlt_clx1abc123/files \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -F "file=@./data.csv"
+```
+
+Response:
+
+```json
+{
+  "id":        "fil_clx1abc123",
+  "vaultId":   "vlt_clx1abc123",
+  "name":      "data.csv",
+  "mimeType":  "text/csv",
+  "size":      4096,
+  "url":       "https://assets.prudra.dev/org_abc/vlt_clx1abc123/data.csv",
+  "createdAt": "2026-04-30T09:00:00.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `buffer` | Buffer | Yes | File content as a Node.js Buffer |
+| `fileName` | string | Yes | File name including extension |
+| `mimeType` | string | Yes | MIME type (e.g., `application/pdf`, `image/png`) |
+
+## Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | File ID (`fil_...`) |
+| `vaultId` | string | Vault this file belongs to |
+| `name` | string | File name |
+| `mimeType` | string | MIME type |
+| `size` | number | File size in bytes |
+| `url` | string | CDN URL for download |
+| `createdAt` | string | ISO timestamp |
+
+## Error handling
+
+| Error | Status | Cause | Resolution |
+|---|---|---|---|
+| `file-too-large` | 413 | File exceeds plan max size | Compress file or upgrade plan |
+| `files-per-vault-exceeded` | 422 | Vault file count limit reached | Delete files or use a new vault |
+| `vault-sealed` | 409 | Vault is already sealed | Upload before sealing |
+| `storage-quota-exceeded` | 429 | Total storage limit reached | Delete old vaults or upgrade |
+
+## Related
+
+- [Download files](/storage/files/download) — retrieve file contents
+- [Delete files](/storage/files/delete) — remove files from a vault
+- [Vault quota](/storage/vaults/quota) — check storage usage

@@ -1,0 +1,86 @@
+---
+title: "Retry behaviour"
+description: "Exponential backoff schedule, dead-letter queue, and manual replay for failed webhook deliveries."
+---
+
+## Retry behaviour
+
+Prudra retries webhook deliveries up to 5 times with exponential backoff. After 5 failures, the delivery moves to the dead-letter queue where you can replay it manually.
+
+## Retry schedule
+
+| Attempt | Delay after previous failure |
+|---|---|
+| Attempt 1 (initial) | Immediate |
+| Retry 1 | 5 seconds |
+| Retry 2 | 10 seconds |
+| Retry 3 | 20 seconds |
+| Retry 4 | 40 seconds |
+| Retry 5 | 80 seconds |
+| Dead-letter | After retry 5 failure |
+
+Total time from first attempt to dead-letter: ~2.5 minutes.
+
+## What counts as a failure
+
+Prudra considers a delivery failed if:
+- Your endpoint returns any non-2xx status code
+- Your endpoint does not respond within 10 seconds
+- The TCP connection is refused
+
+Returning 200 immediately (before processing) and processing asynchronously is the correct pattern.
+
+## Respond 200 before processing
+
+```typescript
+app.post('/webhooks/prudra', express.raw({ type: '*/*' }), async (req, res) => {
+  // Respond 200 immediately — Prudra won't retry
+  res.sendStatus(200);
+
+  // Verify and process asynchronously
+  const isValid = verifyWebhook({ ... });
+  if (!isValid) return;
+
+  const event = JSON.parse(req.body.toString());
+  await processEventAsync(event);  // slow processing is safe here
+});
+```
+
+If you respond 200 only after your processing is complete, slow handlers will cause retries when they exceed the 10-second timeout.
+
+## Manual replay
+
+View and replay failed deliveries from the API:
+
+```bash
+# List delivery attempts for a webhook
+curl "https://api.prudra.dev/webhooks/wh_clx1abc123/attempts" \
+  -H "Authorization: Bearer prv_test_sk_..."
+
+# Replay a specific delivery
+curl -X POST https://api.prudra.dev/webhooks/wh_clx1abc123/replay \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "deliveryId": "del_clx1abc123" }'
+```
+
+## Idempotency
+
+Your webhook handler must be idempotent. Retries deliver the same `eventId` — check whether you've already processed an event before acting:
+
+```typescript
+const event = JSON.parse(req.body.toString());
+
+// Idempotency check
+const already = await db.webhookEvents.findOne({ eventId: event.eventId });
+if (already) return;  // already processed
+
+await db.webhookEvents.create({ eventId: event.eventId });
+await processEvent(event);
+```
+
+## Related
+
+- [Register a webhook](/webhooks/register) — set up webhook endpoints
+- [Verify signatures](/webhooks/verify-signatures) — validate delivery authenticity
+- [Event reference](/webhooks/event-reference) — all event types and payloads

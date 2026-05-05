@@ -1,0 +1,76 @@
+---
+title: "Transfer fees"
+description: "Gas costs, protocol fees, and fee estimation for direct, swap, and bridge transfers."
+---
+
+## Transfer fees
+
+Transfer costs vary by route. Direct transfers pay only gas. Swaps and bridges add protocol fees on top of gas.
+
+## Fee structure by route
+
+| Route | Gas | Protocol fee | Typical total (Base USDC) |
+|---|---|---|---|
+| `direct` | Yes | None | ~$0.001–$0.01 |
+| `lifi-swap` | Yes | 0.3–0.5% of amount | ~$0.01–$0.50 |
+| `lifi-bridge` | Yes (source + dest) | 0.05–0.3% of amount | ~$0.50–$5.00 |
+
+Gas costs vary by chain congestion and gas price at the time of the transaction. Fees are deducted from the source wallet in the native gas token of the source chain (e.g., ETH on Base).
+
+## How fees are paid
+
+Prudra's managed wallets pay gas fees from the wallet's native token balance. When you provision a wallet, Prudra funds it with a small initial gas balance for the first few transactions. For ongoing operations, you need to maintain a native token balance.
+
+<Note>
+  On Pro and Enterprise plans, **gasless transfers** are available for USDC transfers on Base and Optimism. Prudra sponsors the gas fee and deducts the equivalent from your USDC balance.
+</Note>
+
+## Gas balance requirements
+
+| Chain | Gas token | Recommended minimum |
+|---|---|---|
+| Base | ETH | 0.005 ETH |
+| Ethereum | ETH | 0.01 ETH |
+| Optimism | ETH | 0.005 ETH |
+| Arbitrum | ETH | 0.005 ETH |
+| Polygon | MATIC | 1 MATIC |
+
+Check your gas balance alongside your token balance:
+
+```typescript
+import { getBalance } from '@prudra/wallet';
+
+const balances = await getBalance({ walletId: 'mwt_clx1abc123' });
+// balances includes native gas token entries
+for (const b of balances) {
+  console.log(`${b.tokenSymbol}: ${b.balance}`);
+}
+// Example output:
+// USDC: 100.00
+// ETH: 0.008 (gas token)
+```
+
+## Protocol fees for swaps and bridges
+
+Protocol fees are charged by the Li.Fi aggregator and its underlying DEX/bridge protocols. These fees are:
+
+- Deducted from the `amount` you specify
+- Variable based on market conditions and liquidity
+- Visible in the transaction response as `feeAmount` and `feeToken`
+
+```json
+{
+  "id":        "wtx_clx1abc123",
+  "route":     "lifi-swap",
+  "amount":    "5.00",
+  "feeAmount": "0.015",
+  "feeToken":  "USDC",
+  "toAmount":  "4.985"
+}
+```
+
+## Related
+
+- [Transfer routing](/wallets/transfers/routing) — how routes are selected
+- [Send a transfer](/wallets/transfers/send) — full API reference
+- [Check balance](/wallets/managed/check-balance) — verify gas and token balances

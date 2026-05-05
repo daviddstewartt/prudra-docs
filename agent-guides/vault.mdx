@@ -1,0 +1,123 @@
+---
+title: "Vault access"
+description: "Read vault documents, download files, and subscribe to real-time SSE events as an agent."
+---
+
+## Vault access
+
+After a successful payment, the server returns a `vaultId`. Use it to access results — documents, files, and real-time progress events.
+
+## Read vault contents
+
+The server includes a vault access token or you can use your API key:
+
+```typescript
+async function readVault(vaultId: string, accessToken: string) {
+  const response = await fetch(
+    `https://api.prudra.dev/vaults/${vaultId}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  const vault = await response.json();
+
+  // Documents
+  for (const doc of vault.documents) {
+    console.log(doc.label, doc.data);
+  }
+
+  // Files — CDN URLs
+  for (const file of vault.files) {
+    console.log(file.name, file.url);
+  }
+}
+```
+
+## Subscribe to real-time progress
+
+When the server is streaming results, subscribe to the SSE event stream:
+
+```typescript
+import EventSource from 'eventsource';
+
+async function streamVaultEvents(vaultId: string, accessToken: string) {
+  return new Promise<void>((resolve, reject) => {
+    const es = new EventSource(
+      `https://api.prudra.dev/vaults/${vaultId}/events`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    es.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      switch (data.type) {
+        case 'job.progress':
+          console.log(`Progress: ${data.payload.current}/${data.payload.total}`);
+          break;
+
+        case 'vault.sealed':
+          console.log('Job complete:', data.payload.summary);
+          es.close();
+          resolve();
+          break;
+      }
+    };
+
+    es.onerror = (err) => {
+      es.close();
+      reject(new Error('SSE connection failed'));
+    };
+  });
+}
+
+// Usage
+const result = await fetch(serverUrl, { method: 'POST', ... });
+const { vaultId, accessToken, streamUrl } = await result.json();
+
+// Subscribe to events while server processes
+await streamVaultEvents(vaultId, accessToken);
+
+// Read final results
+const vault = await readVault(vaultId, accessToken);
+```
+
+## Download files
+
+CDN URLs from vault files are publicly accessible — no auth required:
+
+```typescript
+const vault = await readVault(vaultId, accessToken);
+
+for (const file of vault.files) {
+  const fileResponse = await fetch(file.url);
+  const buffer = Buffer.from(await fileResponse.arrayBuffer());
+  // Process the file
+}
+```
+
+## Full pattern: pay, stream, read
+
+```typescript
+async function callAndStream(
+  serverUrl:   string,
+  body:        unknown,
+  wallet:      ethers.Wallet,
+) {
+  // 1. Pay
+  const response = await callWithX402(serverUrl, body, wallet);
+  if (!response.ok) throw new Error(`Failed: ${response.status}`);
+
+  const { vaultId, accessToken } = await response.json();
+
+  // 2. Stream events until sealed
+  await streamVaultEvents(vaultId, accessToken);
+
+  // 3. Read results
+  return readVault(vaultId, accessToken);
+}
+```
+
+## Related
+
+- [Events — subscribe SSE](/storage/events/subscribe-sse) — SSE details
+- [Query vaults](/storage/vaults/query) — vault manifest format
+- [Access control](/storage/vaults/access-control) — vault access tokens

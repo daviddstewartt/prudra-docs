@@ -1,0 +1,113 @@
+---
+title: "Track transfer status"
+description: "Poll transfer status or receive webhooks when a transfer completes or fails."
+---
+
+## Track transfer status
+
+Direct and swap transfers confirm synchronously — the `transfer()` call returns with `status: 'confirmed'`. Bridge transfers start as `pending` and require tracking.
+
+## Polling transfer status
+
+```typescript
+import { initialise } from '@prudra/core';
+import { getTransaction } from '@prudra/wallet';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const tx = await getTransaction({ transactionId: 'wtx_clx1abc123' });
+console.log(tx.status);      // 'pending' | 'confirmed' | 'failed'
+console.log(tx.confirmedAt); // null while pending
+```
+
+Via cURL:
+
+```bash
+curl https://api.prudra.dev/wallet-infra/wallets/mwt_clx1abc123/transactions/wtx_clx1abc123 \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+## Webhook-based tracking
+
+Webhooks are more efficient than polling for bridge transfers. Register once and receive status updates automatically:
+
+<Tabs>
+  <Tab title="Register webhook">
+
+```bash
+curl -X POST https://api.prudra.dev/webhooks \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-server.com/webhooks/prudra",
+    "events": ["transfer.completed", "transfer.failed"]
+  }'
+```
+
+  </Tab>
+  <Tab title="Handle webhook">
+
+```typescript
+import { verifyWebhook } from '@prudra/webhooks';
+
+app.post('/webhooks/prudra', express.raw({ type: '*/*' }), (req, res) => {
+  res.sendStatus(200);
+
+  const isValid = verifyWebhook({
+    payload:   req.body as Buffer,
+    signature: req.headers['x-prudra-signature'] as string,
+    timestamp: req.headers['x-prudra-timestamp'] as string,
+    secret:    process.env.PRUDRA_WEBHOOK_SECRET!,
+  });
+
+  if (!isValid) return;
+
+  const event = JSON.parse((req.body as Buffer).toString());
+
+  if (event.type === 'transfer.completed') {
+    const { transactionId, toChain, confirmedAt } = event.payload;
+    console.log(`Transfer ${transactionId} confirmed on ${toChain} at ${confirmedAt}`);
+    // Update your database, notify your users, etc.
+  }
+
+  if (event.type === 'transfer.failed') {
+    const { transactionId, reason, refundTxHash } = event.payload;
+    console.log(`Transfer ${transactionId} failed: ${reason}`);
+    console.log(`Funds returned: ${refundTxHash}`);
+  }
+});
+```
+
+  </Tab>
+</Tabs>
+
+## Status values
+
+| Status | Description | Next state |
+|---|---|---|
+| `pending` | Bridge initiated, awaiting destination confirmation | `confirmed` or `failed` |
+| `confirmed` | Destination chain confirmed, tokens received | Terminal |
+| `failed` | Bridge failed, funds refunded to source wallet | Terminal |
+
+Direct and swap transfers skip `pending` entirely — they return `confirmed` immediately.
+
+## List all transfers
+
+```typescript
+import { listTransactions } from '@prudra/wallet';
+
+const txs = await listTransactions({
+  walletId:  'mwt_clx1abc123',
+  direction: 'outbound',
+});
+
+for (const tx of txs) {
+  console.log(`${tx.id}  ${tx.route}  ${tx.status}  ${tx.amount} ${tx.fromToken}`);
+}
+```
+
+## Related
+
+- [Cross-chain transfers](/wallets/transfers/cross-chain) — bridge timing and failure handling
+- [Webhooks overview](/webhooks/overview) — setting up webhook endpoints
+- [Transaction history](/wallets/managed/transactions) — full transaction list

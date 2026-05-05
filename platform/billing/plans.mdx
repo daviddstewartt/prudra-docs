@@ -1,0 +1,70 @@
+---
+title: "Plans"
+description: "Hobby, Pro, and Enterprise plan comparison with limits from the Prudra billing configuration."
+---
+
+## Plans
+
+## Hobby
+
+**Free.** For development, testing, and small-scale production.
+
+- 100 payments / month
+- 1 managed wallet, 1 BYO wallet, 1 active chain
+- 3 active vaults, 1 persisted vault, 24h TTL
+- 50 documents per vault, 5 files per vault, 10 MB max file size, 500 MB total storage
+- No session payments, no webhooks, no auto-sweep
+
+## Pro
+
+**Paid.** For production workloads with higher throughput and full feature access.
+
+- 10,000 payments / month
+- 1 managed wallet, 5 BYO wallets, 5 active chains
+- 50 active vaults, 20 persisted vaults, 7-day TTL
+- Unlimited documents, 100 files per vault, 100 MB max file size, 10 GB total storage
+- Session payments, webhooks, auto-sweep, gasless transfers, treasury yield
+
+## Enterprise
+
+**Custom pricing.** For unlimited scale and dedicated support.
+
+- Unlimited payments
+- Unlimited managed wallets, BYO wallets, active chains
+- Unlimited vaults, unlimited storage, no TTL
+- Up to 1 GB per file
+- All Pro features plus dedicated support, SLA, and custom limits
+
+Contact [support@prudra.com](mailto:support@prudra.com) to discuss Enterprise.
+
+## Upgrading
+
+Upgrade via the dashboard:
+
+1. Go to [dashboard.prudra.com](https://dashboard.prudra.com)
+2. Navigate to **Settings → Billing**
+3. Select your plan and complete payment
+
+Upgrades take effect immediately. You can downgrade at the end of your billing cycle.
+
+## Checking your current plan
+
+```bash
+curl https://api.prudra.dev/billing/plan \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+{
+  "plan":      "pro",
+  "status":    "active",
+  "renewsAt":  "2026-06-01T00:00:00.000Z"
+}
+```
+
+## Related
+
+- [Usage](/platform/billing/usage) — check usage against plan limits
+- [Billing overview](/platform/billing/overview) — billing concepts

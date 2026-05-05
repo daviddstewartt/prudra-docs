@@ -1,0 +1,91 @@
+---
+title: "Pricing signals"
+description: "How agents use registry pricing data to optimise payment strategy and budget management."
+---
+
+## Pricing signals
+
+The route registry gives AI agents structured pricing signals before they make requests. Agents can use these signals to budget, prioritise, and select payment protocols.
+
+## What pricing signals are available
+
+The registry provides per-route:
+
+| Signal | Description |
+|---|---|
+| `price` | Exact cost per call in decimal USDC |
+| `token` | Token used for payment (`USDC`, `USDC.e`) |
+| `chain` | Chain the payment settles on |
+| `protocols` | Which protocols the route accepts (`x402`, `mpp`) |
+
+## Agent budgeting pattern
+
+```typescript
+async function planApiUsage(budget: number) {
+  const routes = await fetchRegistry('org_clx1abc123');
+
+  // How many calls can we make per route within budget?
+  const plan = routes.map(route => ({
+    route:       route.route,
+    price:       parseFloat(route.price),
+    maxCalls:    Math.floor(budget / parseFloat(route.price)),
+    description: route.description,
+  }));
+
+  // Sort by value (description length as proxy for output richness)
+  return plan.sort((a, b) => a.price - b.price);
+}
+```
+
+## Protocol selection strategy
+
+Agents with both x402 and MPP wallets can select the cheapest or fastest protocol:
+
+```typescript
+function selectProtocol(
+  route: { protocols: string[]; chain: string },
+  agentCapabilities: { hasX402: boolean; hasMPP: boolean }
+) {
+  if (route.protocols.includes('x402') && agentCapabilities.hasX402) {
+    return 'x402';  // prefer x402 — faster settlement on Base
+  }
+  if (route.protocols.includes('mpp') && agentCapabilities.hasMPP) {
+    return 'mpp';   // fall back to MPP on Tempo
+  }
+  throw new Error(`No supported protocol for route ${route}`);
+}
+```
+
+## Cost estimation before a run
+
+Before executing a multi-step workflow, an agent can estimate total cost:
+
+```typescript
+async function estimateWorkflowCost(steps: Array<{ route: string; calls: number }>) {
+  const registry = await fetchRegistry('org_clx1abc123');
+  const byRoute = Object.fromEntries(registry.map(r => [r.route, r]));
+
+  let totalCost = 0;
+  for (const step of steps) {
+    const route = byRoute[step.route];
+    if (!route) throw new Error(`Route ${step.route} not in registry`);
+    totalCost += parseFloat(route.price) * step.calls;
+  }
+
+  return {
+    totalCost,
+    currency: 'USDC',
+    steps: steps.map(s => ({
+      ...s,
+      pricePerCall: parseFloat(byRoute[s.route].price),
+      totalForStep: parseFloat(byRoute[s.route].price) * s.calls,
+    })),
+  };
+}
+```
+
+## Related
+
+- [Query routes](/discovery/registry/query-routes) — fetch registry data
+- [Agent payments guide](/agent-guides/payments) — full agent payment implementation
+- [x402 overview](/payments/x402/overview) — x402 payment protocol

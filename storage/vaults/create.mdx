@@ -1,0 +1,117 @@
+---
+title: "Create a vault"
+description: "How vaultMiddleware creates vaults, and manual vault creation for non-Express workflows."
+---
+
+## Create a vault
+
+Vaults are normally created automatically by `vaultMiddleware`. For non-Express workflows or custom orchestration, you can also create vaults manually via the API.
+
+## Automatic creation via vaultMiddleware
+
+The recommended approach — add `vaultMiddleware()` after `payMiddleware` in your Express chain:
+
+```typescript
+import { walletMiddleware, payMiddleware, vaultMiddleware } from '@prudra/express';
+
+app.post(
+  '/generate',
+  walletMiddleware({ walletId: 'mwt_clx1abc123' }),
+  payMiddleware({ price: '0.05', description: 'Generate report' }),
+  vaultMiddleware(),
+  async (req, res) => {
+    // req.vault is ready — created for this payment
+    const vault = req.vault!;
+    console.log(vault.id);  // 'vlt_clx1abc123'
+
+    await vault.addDocument({ report: 'data...' }, 'Report');
+    await vault.seal('Report generated');
+
+    res.json({ vaultId: vault.id });
+  }
+);
+```
+
+`vaultMiddleware` creates the vault, attaches it to `req.vault`, and handles cleanup if your handler throws.
+
+## Manual vault creation
+
+For queue workers, Lambda functions, or other non-Express workflows:
+
+<Tabs>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { createVault } from '@prudra/vault';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const vault = await createVault({
+  label:      'Report generation job',
+  ttlHours:   24,
+  paymentId:  'pay_clx1abc123',  // optional — link to payment
+});
+
+console.log(vault.id);        // 'vlt_clx1abc123'
+console.log(vault.status);    // 'active'
+console.log(vault.expiresAt); // ISO timestamp
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X POST https://api.prudra.dev/vaults \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "label":    "Report generation job",
+    "ttlHours": 24
+  }'
+```
+
+Response:
+
+```json
+{
+  "id":        "vlt_clx1abc123",
+  "status":    "active",
+  "label":     "Report generation job",
+  "ttlHours":  24,
+  "expiresAt": "2026-05-01T09:00:00.000Z",
+  "createdAt": "2026-04-30T09:00:00.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `label` | string | No | Human-readable description of the vault's purpose |
+| `ttlHours` | number | No | Time-to-live in hours (default: plan default; max: plan limit) |
+| `paymentId` | string | No | Link to a payment record for traceability |
+
+## Plan TTL defaults
+
+| Plan | Default TTL | Maximum TTL |
+|---|---|---|
+| Hobby | 24 hours | 24 hours |
+| Pro | 7 days (168 hours) | 7 days |
+| Enterprise | 30 days | Unlimited |
+
+## Error handling
+
+| Error | Status | Cause | Resolution |
+|---|---|---|---|
+| `vault-quota-exceeded` | 429 | Active vault limit reached | Seal or delete unused vaults |
+| `ttl-exceeds-plan` | 422 | TTL greater than plan maximum | Use a lower TTL or upgrade plan |
+
+## Related
+
+- [Vaults overview](/storage/vaults/overview) — vault concepts and lifecycle
+- [Seal a vault](/storage/vaults/seal) — close a vault for writes
+- [Vault quota](/storage/vaults/quota) — check your active vault count

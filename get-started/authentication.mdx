@@ -1,0 +1,156 @@
+---
+title: "Authenticate your requests"
+description: "How to create and use Prudra API keys, and what to do when authentication fails."
+---
+
+## Authenticate your requests
+
+Every request to the Prudra API must include an API key. API keys are scoped to an organisation and grant full access to all resources in that organisation.
+
+## API key formats
+
+Prudra uses two key formats depending on your environment:
+
+| Format | Environment | Use when |
+|---|---|---|
+| `prv_test_sk_...` | Test / development | Local development, CI, staging environments |
+| `prv_live_sk_...` | Live / production | Production servers making real payments |
+
+Test keys make real API calls but payments are processed in stub mode by default — no real crypto moves. Live keys process real payments on mainnet.
+
+<Warning>
+  Never use a live key in development or commit any key to version control. Use environment variables to keep keys out of your code.
+</Warning>
+
+## Get an API key
+
+<Tabs>
+  <Tab title="Dashboard">
+    1. Go to [dashboard.prudra.com](https://dashboard.prudra.com) and sign in
+    2. Click **Settings** in the left sidebar
+    3. Click **API Keys**
+    4. Click **Create API key**
+    5. Enter a name for the key (e.g. "Development" or "Production server")
+    6. Click **Create**
+
+    The raw key is shown once. Copy it immediately — it cannot be retrieved again.
+
+    Store the key in your environment:
+
+    ```bash
+    PRUDRA_API_KEY=prv_test_sk_your_key_here
+    ```
+  </Tab>
+  <Tab title="SDK">
+    ```typescript
+    // No SDK call needed to create keys — use the dashboard or cURL.
+    // Once you have a key, initialise the SDK with it:
+
+    import { initialise } from '@prudra/core';
+
+    initialise({
+      apiKey: process.env.PRUDRA_API_KEY!, // always from environment
+    });
+    ```
+
+    Call `initialise()` once at application startup before any other Prudra SDK functions.
+  </Tab>
+  <Tab title="cURL">
+    ```bash
+    # Create an API key
+    curl -X POST https://api.prudra.dev/organisations/YOUR_ORG_ID/api-keys \
+      -H "Authorization: Bearer prv_test_sk_existing_key" \
+      -H "Content-Type: application/json" \
+      -d '{"name": "Production server"}'
+    ```
+
+    Response:
+
+    ```json
+    {
+      "id": "key_clx1abc123",
+      "name": "Production server",
+      "key": "prv_live_sk_...",
+      "createdAt": "2026-04-30T09:00:00.000Z"
+    }
+    ```
+
+    The `key` field is only present in the create response. It is never returned again.
+  </Tab>
+</Tabs>
+
+## Pass the key in requests
+
+All API requests use Bearer token authentication in the `Authorization` header:
+
+```bash
+Authorization: Bearer prv_test_sk_your_key_here
+```
+
+When using the SDK, `initialise()` handles this automatically for all SDK calls. When making direct API calls:
+
+```bash
+curl https://api.prudra.dev/billing/usage \
+  -H "Authorization: Bearer prv_test_sk_your_key_here"
+```
+
+## Error responses
+
+A missing or invalid key returns HTTP 401:
+
+```json
+{
+  "type": "https://api.prudra.dev/problems/unauthorized",
+  "title": "Unauthorized",
+  "status": 401,
+  "detail": "Invalid or missing API key."
+}
+```
+
+| Cause | Resolution |
+|---|---|
+| Key missing from header | Add `Authorization: Bearer prv_test_sk_...` to the request |
+| Key format wrong | Keys start with `prv_test_sk_` or `prv_live_sk_` — check for typos |
+| Key revoked | Create a new key in the dashboard. Revoked keys cannot be reactivated. |
+| Wrong environment | Test keys don't work against live endpoints and vice versa |
+| Key belongs to different org | Each key is org-scoped — use the correct key for your organisation |
+
+## List and revoke keys
+
+<Tabs>
+  <Tab title="Dashboard">
+    Go to **Settings → API Keys** in [dashboard.prudra.com](https://dashboard.prudra.com). All active keys for your organisation are listed (raw key values are never shown). Click **Revoke** next to any key to immediately invalidate it.
+  </Tab>
+  <Tab title="SDK">
+    ```typescript
+    // List all keys for your organisation
+    // (Use the REST API directly — no dedicated SDK function for key management)
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```bash
+    # List keys
+    curl https://api.prudra.dev/organisations/YOUR_ORG_ID/api-keys \
+      -H "Authorization: Bearer prv_test_sk_..."
+
+    # Revoke a key
+    curl -X DELETE \
+      https://api.prudra.dev/organisations/YOUR_ORG_ID/api-keys/KEY_ID \
+      -H "Authorization: Bearer prv_test_sk_..."
+    ```
+  </Tab>
+</Tabs>
+
+## Best practices
+
+- Use one key per service — if a key is compromised, you can revoke it without affecting other services
+- Store keys in environment variables, never in code or config files
+- Use test keys (`prv_test_sk_`) in development and CI
+- Rotate live keys periodically or immediately if compromised
+- The `apiKeyId` field on payment logs lets you trace which key was used for each payment
+
+## Related
+
+- [API key best practices](/platform/security/api-keys) — key rotation, scoping, and security
+- [Manage API keys](/platform/orgs/api-keys) — creating, listing, and revoking keys
+- [Authentication concept](/platform/security/auth) — how Bearer token authentication works internally

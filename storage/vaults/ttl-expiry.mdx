@@ -1,0 +1,99 @@
+---
+title: "TTL and expiry"
+description: "How vault TTL works, how to extend it, and what happens when a vault expires."
+---
+
+## TTL and expiry
+
+Every vault has a time-to-live (TTL). When the TTL elapses, the vault transitions to `expired` and all its contents — documents, files, and events — are deleted permanently.
+
+## Default TTL by plan
+
+| Plan | Default TTL |
+|---|---|
+| Hobby | 24 hours |
+| Pro | 7 days (168 hours) |
+| Enterprise | Unlimited (no auto-expiry) |
+
+TTL starts counting from when the vault is created, not when it is sealed.
+
+## Expiry warning webhook
+
+Prudra fires a `vault.expiring` webhook 1 hour before expiry:
+
+```json
+{
+  "type":    "vault.expiring",
+  "eventId": "evt_clx1abc123",
+  "payload": {
+    "vaultId":   "vlt_clx1abc123",
+    "expiresAt": "2026-05-01T10:00:00.000Z"
+  }
+}
+```
+
+Use this to prompt users to download their results or to auto-persist if needed.
+
+## Extend TTL without persisting
+
+Push the expiry forward using `extendVaultTtl()`. This does not consume persisted vault quota:
+
+<Tabs>
+  <Tab title="SDK">
+
+```typescript
+import { extendVaultTtl } from '@prudra/vault';
+
+await extendVaultTtl({
+  vaultId:  'vlt_clx1abc123',
+  ttlHours: 48,  // new TTL from now — must not exceed plan maximum
+});
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X POST https://api.prudra.dev/vaults/vlt_clx1abc123/extend \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "ttlHours": 48 }'
+```
+
+  </Tab>
+</Tabs>
+
+Each call to `extendVaultTtl()` sets an absolute TTL from the current time — it doesn't add to the remaining TTL.
+
+## Persist to survive past TTL
+
+To keep a vault permanently (until manually deleted), use `persist()` instead of `extendVaultTtl()`:
+
+```typescript
+import { persistVault } from '@prudra/vault';
+await persistVault({ vaultId: 'vlt_clx1abc123' });
+```
+
+Persisted vaults never auto-expire. They count against your persisted vault quota.
+
+## What happens on expiry
+
+When a vault expires:
+1. All documents are deleted from the database
+2. All files are deleted from GCS (CDN URLs become invalid)
+3. All vault events are purged
+4. The vault ID returns 404 on any subsequent request
+5. A `vault.expired` webhook fires
+
+## Error handling
+
+| Error | Status | Cause | Resolution |
+|---|---|---|---|
+| `vault-expired` | 404 | Vault TTL elapsed | Cannot recover — ensure you persist or download before expiry |
+| `ttl-exceeds-plan` | 422 | Requested TTL over plan max | Use a lower TTL or upgrade plan |
+
+## Related
+
+- [Persist a vault](/storage/vaults/persist) — prevent expiry permanently
+- [Vault quota](/storage/vaults/quota) — active and persisted vault counts
+- [Webhooks event reference](/webhooks/event-reference) — `vault.expiring` and `vault.expired`

@@ -1,0 +1,107 @@
+---
+title: "Agent wallet management"
+description: "Manage your agent's Prudra wallet — check balance, fund it, and transfer funds."
+---
+
+## Agent wallet management
+
+Your AI agent needs a funded wallet to pay for API calls. You can use a Prudra managed wallet (Prudra holds keys), a BYO wallet (you hold keys), or an external wallet (no Prudra integration needed for x402).
+
+## Option 1: External wallet (x402 only)
+
+For x402 payments, your agent just needs an ethers.js `Wallet` — no Prudra wallet needed:
+
+```typescript
+import { ethers } from 'ethers';
+
+// Load from secure storage
+const wallet = new ethers.Wallet(process.env.AGENT_PRIVATE_KEY!);
+console.log('Agent address:', wallet.address);
+// Fund this address with USDC on Base to make payments
+```
+
+## Option 2: Prudra managed wallet (full feature set)
+
+A Prudra managed wallet lets you use the Prudra API to check balances, receive deposits, and initiate transfers programmatically:
+
+```typescript
+import { initialise, Chain, Token } from '@prudra/core';
+import { provisionWallet, getBalance } from '@prudra/wallet';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+// Provision a wallet for your agent
+const wallet = await provisionWallet({
+  chain:           Chain.BASE,
+  supportedTokens: [Token.USDC],
+  name:            'Agent operations wallet',
+});
+
+console.log(wallet.id);      // 'mwt_clx1abc123'
+console.log(wallet.address); // '0x...' — fund this address
+```
+
+## Check your agent's balance
+
+```typescript
+import { getBalance } from '@prudra/wallet';
+
+const balances = await getBalance({ walletId: 'mwt_clx1abc123' });
+
+for (const b of balances) {
+  console.log(`${b.tokenSymbol}: ${b.balance}`);
+}
+// USDC: 45.50
+// ETH: 0.008
+```
+
+## Fund your agent's wallet
+
+Send USDC to the wallet address from any exchange or another wallet. On testnet, use the faucet:
+
+```bash
+# Base Sepolia USDC faucet
+curl -X POST https://faucet.circle.com/v1/faucet/drips \
+  -H "Content-Type: application/json" \
+  -d '{ "address": "0x...", "blockchain": "BASE" }'
+```
+
+## Monitor incoming funds (BYO wallet)
+
+Register a BYO wallet to receive `deposit.success` webhooks when funds arrive:
+
+```typescript
+import { registerBYOWallet } from '@prudra/wallet';
+
+const wallet = await registerBYOWallet({
+  address:         '0x...',  // your agent's external wallet address
+  chain:           Chain.BASE,
+  supportedTokens: [Token.USDC],
+  name:            'Agent external wallet',
+});
+```
+
+## Transfer funds between agent wallets
+
+Move USDC between your agent's wallets programmatically:
+
+```typescript
+import { transfer } from '@prudra/wallet';
+
+await transfer({
+  fromWalletId:   'mwt_clx1abc123',
+  fromWalletType: 'master',
+  fromToken:      Token.USDC,
+  toAddress:      '0xAgentWallet2...',
+  toChain:        Chain.BASE,
+  toToken:        Token.USDC,
+  amount:         '10.00',
+});
+```
+
+## Related
+
+- [Provision a wallet](/wallets/managed/provision) — create a managed wallet
+- [Check balance](/wallets/managed/check-balance) — balance queries
+- [Transfers](/wallets/transfers/overview) — move funds between wallets
+- [BYO wallets](/wallets/byo/overview) — register an external wallet

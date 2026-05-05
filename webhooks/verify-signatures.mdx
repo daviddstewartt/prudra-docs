@@ -1,0 +1,116 @@
+---
+title: "Verify signatures"
+description: "How to verify Prudra webhook HMAC-SHA256 signatures and prevent replay attacks."
+---
+
+## Verify signatures
+
+Every webhook delivery includes two headers you must verify:
+
+- `X-Prudra-Signature` — HMAC-SHA256 of the raw request body
+- `X-Prudra-Timestamp` — Unix timestamp of delivery
+
+Signature verification confirms the webhook was sent by Prudra and the body was not tampered with. Timestamp verification prevents replay attacks.
+
+## Verification with the SDK
+
+```typescript
+import express from 'express';
+import { verifyWebhook } from '@prudra/webhooks';
+
+app.post(
+  '/webhooks/prudra',
+  express.raw({ type: '*/*' }),  // must run BEFORE express.json()
+  (req, res) => {
+    res.sendStatus(200);  // always respond 200 quickly
+
+    const isValid = verifyWebhook({
+      payload:   req.body as Buffer,
+      signature: req.headers['x-prudra-signature'] as string,
+      timestamp: req.headers['x-prudra-timestamp'] as string,
+      secret:    process.env.PRUDRA_WEBHOOK_SECRET!,
+    });
+
+    if (!isValid) {
+      console.warn('Invalid webhook signature — ignoring');
+      return;
+    }
+
+    const event = JSON.parse((req.body as Buffer).toString());
+    // Handle event...
+  }
+);
+```
+
+## Manual verification
+
+If you're not using the SDK:
+
+```typescript
+import crypto from 'crypto';
+
+function verifyWebhookSignature(
+  rawBody:   Buffer,
+  signature: string,
+  timestamp: string,
+  secret:    string,
+): boolean {
+  // Check timestamp is within 5 minutes to prevent replay
+  const fiveMinutes = 5 * 60 * 1000;
+  const ts = parseInt(timestamp, 10) * 1000;
+  if (Math.abs(Date.now() - ts) > fiveMinutes) {
+    return false;
+  }
+
+  // Compute expected signature
+  const signedPayload = `${timestamp}.${rawBody.toString()}`;
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(signedPayload)
+    .digest('hex');
+
+  const received = signature.replace('sha256=', '');
+
+  // Constant-time comparison
+  return crypto.timingSafeEqual(
+    Buffer.from(expected, 'hex'),
+    Buffer.from(received, 'hex'),
+  );
+}
+```
+
+## Signature format
+
+The `X-Prudra-Signature` header value is:
+
+```
+sha256=<hex-digest>
+```
+
+The signed payload is:
+
+```
+<timestamp>.<raw-body>
+```
+
+Where `<timestamp>` is the value of `X-Prudra-Timestamp` and `<raw-body>` is the raw bytes of the request body.
+
+## Critical: use raw body
+
+express.json() parses and discards the raw bytes. You must use express.raw() on the webhook route before express.json():
+
+```typescript
+// Webhook route — uses express.raw()
+app.post('/webhooks/prudra', express.raw({ type: '*/*' }), handler);
+
+// Other routes — uses express.json() normally
+app.use(express.json());
+```
+
+If express.json() has already parsed the body, `req.body` is a JavaScript object, not a Buffer — signature verification will fail.
+
+## Related
+
+- [Register a webhook](/webhooks/register) — get your webhook secret
+- [Retry behaviour](/webhooks/retry-behaviour) — delivery guarantees
+- [Test locally](/webhooks/test-locally) — local development setup

@@ -1,0 +1,113 @@
+---
+title: "Emit events"
+description: "Emit custom progress events to the vault SSE stream from your server handler."
+---
+
+## Emit events
+
+Your server calls `vault.emit()` to push events to subscribed clients in real time. Events can carry any JSON payload.
+
+## Emitting via vaultMiddleware
+
+```typescript
+app.post('/process', walletMiddleware(...), payMiddleware(...), vaultMiddleware(), async (req, res) => {
+  const { items } = req.body;
+  const vault = req.vault!;
+
+  // Respond immediately — client subscribes to the stream in parallel
+  res.json({
+    vaultId:   vault.id,
+    streamUrl: `https://api.prudra.dev/vaults/${vault.id}/events`,
+  });
+
+  // Run job after response
+  setImmediate(async () => {
+    await vault.emit('job.started', {
+      itemCount: items.length,
+      startedAt: new Date().toISOString(),
+    });
+
+    for (let i = 0; i < items.length; i++) {
+      await processItem(items[i]);
+      await vault.emit('job.progress', {
+        current: i + 1,
+        total:   items.length,
+        percent: Math.round(((i + 1) / items.length) * 100),
+        item:    items[i],
+      });
+    }
+
+    await vault.addDocument({ results }, 'Job results');
+    await vault.seal('All items processed');
+  });
+});
+```
+
+## Emitting via API
+
+<Tabs>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { emitVaultEvent } from '@prudra/vault';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+await emitVaultEvent({
+  vaultId: 'vlt_clx1abc123',
+  type:    'job.progress',
+  payload: { current: 5, total: 10 },
+});
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X POST https://api.prudra.dev/vaults/vlt_clx1abc123/events \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type":    "job.progress",
+    "payload": { "current": 5, "total": 10 }
+  }'
+```
+
+  </Tab>
+</Tabs>
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vaultId` | string | Yes | The vault to emit to |
+| `type` | string | Yes | Event type string (any value; use dot notation convention) |
+| `payload` | object | No | JSON payload — any structure |
+
+## Event naming conventions
+
+Use dot-notation event types for clarity:
+
+```
+job.started
+job.progress
+job.step.completed
+job.completed
+item.error
+```
+
+Avoid spaces and special characters. Maximum type length is 128 characters.
+
+## Error handling
+
+| Error | Status | Cause | Resolution |
+|---|---|---|---|
+| `vault-sealed` | 409 | Cannot emit to a sealed vault | Emit before sealing |
+| `vault-expired` | 404 | Vault has expired | No action — vault is gone |
+
+## Related
+
+- [Subscribe via SSE](/storage/events/subscribe-sse) — client-side subscription
+- [Seal a vault](/storage/vaults/seal) — sealing closes the event stream
+- [Event reference](/storage/events/event-reference) — event payload format

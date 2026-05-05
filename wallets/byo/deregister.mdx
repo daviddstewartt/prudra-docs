@@ -1,0 +1,86 @@
+---
+title: "Deregister a wallet"
+description: "Stop monitoring an address and free your BYO wallet slot."
+---
+
+## Deregister a wallet
+
+Deregistering a BYO wallet stops address monitoring and frees the wallet slot for reuse. No funds are affected — Prudra never held custody of the wallet, so deregistering is purely a monitoring change.
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard support for BYO wallet deregistration is coming soon. Use the SDK or cURL to deregister wallets.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { deregisterBYOWallet } from '@prudra/wallet';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+await deregisterBYOWallet({ walletId: 'byw_clx1abc123' });
+
+console.log('Wallet deregistered — monitoring stopped');
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X DELETE https://api.prudra.dev/wallet-infra/byo-wallets/byw_clx1abc123 \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+{
+  "id":          "byw_clx1abc123",
+  "status":      "deregistered",
+  "deregisteredAt": "2026-04-30T09:00:00.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## What deregistering does
+
+When you deregister a BYO wallet:
+
+1. Address monitoring is stopped immediately
+2. No further `deposit.success` webhooks fire for this address
+3. The wallet slot is freed — you can register a new wallet on your plan
+4. Existing `WalletTransaction` and `WalletBalance` records are retained (read-only)
+5. The wallet ID becomes invalid for use in `walletMiddleware`
+
+## What deregistering does NOT do
+
+- It does not move, freeze, or affect funds in the wallet
+- It does not delete historical transaction records
+- It does not affect payments already processed through this wallet
+
+## Before deregistering
+
+Ensure you have updated any `walletMiddleware` calls that reference this wallet ID. Requests hitting a middleware with a deregistered wallet ID return a 503 error.
+
+```typescript
+// Remove or update before deregistering
+app.use(walletMiddleware({ walletId: 'byw_clx1abc123' }));  // ← update this
+```
+
+## Error handling
+
+| Error | Status | Cause | Resolution |
+|---|---|---|---|
+| `wallet-not-found` | 404 | Wallet ID does not exist | Check the wallet ID is correct |
+| `wallet-already-deregistered` | 409 | Already deregistered | No action needed |
+
+## Related
+
+- [Register a BYO wallet](/wallets/byo/register) — register a new wallet after freeing a slot
+- [Monitor deposits](/wallets/byo/monitor-deposits) — how deposit monitoring worked
+- [Plan limits](/wallets/byo/chains-tokens) — slot counts by plan

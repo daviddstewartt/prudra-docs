@@ -1,0 +1,78 @@
+---
+title: "Supported chains and tokens"
+description: "All blockchain networks and tokens supported by managed wallets, including testnet availability."
+---
+
+## Supported chains and tokens
+
+Managed wallets support the following chains. Each chain has its own set of supported tokens and ERC-3009 availability (required for x402 payments).
+
+## Supported chains
+
+| Chain | Chain ID | Tokens | x402 (ERC-3009) | MPP | Testnet |
+|---|---|---|---|---|---|
+| Base | 8453 | USDC | ✓ | — | Base Sepolia (84532) |
+| Ethereum | 1 | USDC, USDT | ✓ | — | Sepolia (11155111) |
+| Optimism | 10 | USDC | ✓ | — | OP Sepolia (11155420) |
+| Arbitrum | 42161 | USDC | ✓ | — | Arbitrum Sepolia (421614) |
+| Polygon | 137 | USDC | ✓ | — | Polygon Amoy (80002) |
+| Tempo | 4217 | USDC.e | — | ✓ | Tempo testnet |
+
+ERC-3009 support is required for x402 payments. All EVM chains listed support ERC-3009 via USDC (Circle's USDC implements ERC-3009).
+
+Tempo uses its own payment protocol (MPP) — x402 is not supported on Tempo. MPP is not supported on any chain other than Tempo.
+
+## Using the Chain enum
+
+```typescript
+import { Chain, Token } from '@prudra/core';
+
+// Provision on Base
+await provisionWallet({
+  chain:           Chain.BASE,
+  supportedTokens: [Token.USDC],
+});
+
+// Provision on Tempo
+await provisionWallet({
+  chain:           Chain.TEMPO,
+  supportedTokens: [Token.USDC_E],
+});
+```
+
+## Testnet mode
+
+In development, set `network: 'testnet'` when provisioning:
+
+```typescript
+await provisionWallet({
+  chain:           Chain.BASE,
+  supportedTokens: [Token.USDC],
+  network:         'testnet',   // uses Base Sepolia
+});
+```
+
+With `PAYMENT_STUB_MODE=true`, testnet RPC is used and payments are simulated — no real tokens needed.
+
+## Active chain limits
+
+The number of active chains (chains with at least one wallet) is plan-limited:
+
+| Plan | Active chains |
+|---|---|
+| Hobby | 1 |
+| Pro | 5 |
+| Enterprise | Unlimited |
+
+A chain becomes "active" when you provision a wallet on it. Deprovisioning a wallet frees the chain slot.
+
+## USDC.e on Tempo
+
+USDC.e is the Tempo bridged version of USDC. It uses the same ERC-20 interface as USDC but on the Tempo network. For MPP payments, agents send USDC.e to the server wallet — the Prudra middleware verifies the Tempo transaction before proceeding.
+
+## Related
+
+- [Provision a wallet](/wallets/managed/provision) — create a wallet on any supported chain
+- [BYO wallet chains and tokens](/wallets/byo/chains-tokens) — supported chains for BYO wallets
+- [x402 overview](/payments/x402/overview) — x402 uses Base/USDC
+- [MPP overview](/payments/mpp/overview) — MPP uses Tempo/USDC.e

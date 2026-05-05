@@ -1,0 +1,114 @@
+---
+title: Token transfers
+description: How Prudra routes token transfers between wallets, chains, and tokens automatically.
+---
+
+## Overview
+
+Prudra managed wallets can send tokens to any EVM address — on the same chain, to a different chain, or swapping into a different token along the way. The routing decision is made automatically by Prudra based on the source and destination you specify. You call one function (or a single HTTP endpoint); Prudra handles the rest.
+
+## How routing works
+
+Every transfer falls into one of three categories:
+
+**Direct transfer**  
+Same chain, same token. Prudra sends an ERC-20 transfer directly on-chain. This is the fastest and cheapest route — no intermediary, no price impact, no additional latency.
+
+- Base USDC → Base USDC (direct)  
+- Tempo USDC.e → Tempo USDC.e (direct)
+
+**Swap**  
+Same chain, different token. Prudra routes through on-chain liquidity to exchange the source token for the destination token (Li.Fi in production).
+
+- Base USDC → Base USDT (swap)  
+- Base ETH → Base USDC (swap)
+
+**Bridge**  
+Different chain. Prudra moves funds from the source chain to the destination chain. If the source and destination tokens also differ, the swap is bundled into the bridge in one operation (Li.Fi).
+
+- Base USDC → Polygon USDC (bridge)  
+- Base USDC → Polygon USDT (bridge + swap in one step)
+
+## Fees
+
+**Direct transfers:** you pay gas only. On Base, this is typically a fraction of a cent.
+
+**Swaps and bridges:** in addition to gas, there are protocol fees charged by the liquidity providers and routing infrastructure that execute the swap or bridge. These fees are deducted from the transfer amount. Prudra shows estimated output in logs and monitoring so there are fewer surprises in production.
+
+Prudra does not add a markup on top of protocol fees. What the network charges is what you pay.
+
+## Transfer status
+
+Direct transfers and swaps confirm within seconds and return `status: "confirmed"` immediately in normal conditions.
+
+Bridges take longer — typically 1–20 minutes depending on the chains involved and current network conditions. Bridges return `status: "pending"` until the destination transaction confirms. You can subscribe to webhook events for completion as your integration matures.
+
+## Checking the route before sending
+
+A dedicated `getTransferQuote()` SDK helper is **planned** so you can preview estimated output, fees, and latency before broadcasting. Today, routing is derived automatically from your request parameters; ensure `fromChain`, `toChain`, `fromToken`, and `toToken` are set intentionally.
+
+When quote APIs ship, the shape will resemble:
+
+```typescript
+// Planned SDK — not yet available in all environments
+const quote = await getTransferQuote({
+  fromWalletId:   'mwt_abc123',
+  fromWalletType: 'master',
+  fromToken:      Token.USDC,
+  toAddress:      '0xRecipient...',
+  toChain:        Chain.POLYGON,
+  toToken:        Token.USDC,
+  amount:         '100.00',
+});
+
+console.log(quote.estimatedOutput);  // e.g. '99.82' after fees
+console.log(quote.feesUsd);          // e.g. '0.18'
+console.log(quote.estimatedSeconds); // e.g. 45
+console.log(quote.route);            // 'bridge'
+```
+
+## Quickstart (current API)
+
+```bash
+curl -X POST https://api.prudra.dev/wallet-infra/transfer \
+  -H "Authorization: Bearer prv_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fromWalletId": "mwt_xxx",
+    "fromWalletType": "master",
+    "fromChain": "base",
+    "fromToken": "USDC",
+    "toAddress": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+    "toChain": "base",
+    "toToken": "USDC",
+    "amount": "10.00"
+  }'
+```
+
+## SDK
+
+```typescript
+import { transferManagedTokens, Chain, Token } from '@prudra/wallet';
+
+const result = await transferManagedTokens({
+  fromWalletId:   'mwt_xxx',
+  fromWalletType: 'master',
+  fromChain:      Chain.BASE,
+  fromToken:      Token.USDC,
+  toAddress:      '0x...',
+  toChain:        Chain.BASE,
+  toToken:        Token.USDC,
+  amount:         '10.00',
+});
+```
+
+## Supported chains and tokens
+
+See the [Chain](/concepts/chains) and [Token](/concepts/tokens) references for identifiers. Prudra validates combinations server-side and returns `422` with a clear error when a pair is unsupported.
+
+## Related
+
+- [Provisioning managed wallets](/concepts/managed-wallets)
+- [Withdrawing funds to a bank account](/guides/withdrawing-funds)
+- [Wallet SDK](/guides/sdk-wallet)
+- [Wallet product](https://prudra.com/products/wallet)

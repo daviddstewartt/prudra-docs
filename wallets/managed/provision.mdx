@@ -1,0 +1,148 @@
+---
+title: "Provision a wallet"
+description: "Create a managed wallet on any supported chain using the SDK or API."
+---
+
+## Provision a wallet
+
+Provisioning a managed wallet generates a new private key, encrypts it, and returns the wallet address. The wallet is ready to receive payments immediately after provisioning.
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard support for wallet provisioning is coming soon. Use the SDK or cURL to provision wallets.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import { initialise, Chain, Token } from '@prudra/core';
+import { provisionWallet } from '@prudra/wallet';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const wallet = await provisionWallet({
+  chain:           Chain.BASE,
+  name:            'Primary wallet',
+  supportedTokens: [Token.USDC],
+});
+
+console.log(wallet.id);              // mwt_clx1abc123
+console.log(wallet.address);         // 0x742d35Cc...
+console.log(wallet.provisionStatus); // 'active'
+console.log(wallet.chain);           // 'base'
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X POST https://api.prudra.dev/wallet-infra/master-wallets \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Primary wallet",
+    "chain": "base",
+    "supportedTokens": ["USDC"],
+    "network": "mainnet"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id":              "mwt_clx1abc123",
+  "address":         "0x742d35Cc...",
+  "chain":           "base",
+  "chainId":         8453,
+  "provisionStatus": "active",
+  "supportedTokens": ["USDC"],
+  "keyVersion":      "v1_1746000000000",
+  "createdAt":       "2026-04-30T09:00:00.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Human-readable label for this wallet. Shown in the dashboard. |
+| `chain` | Chain | Yes | The blockchain for this wallet. See [supported chains](/wallets/managed/supported-chains). |
+| `supportedTokens` | Token[] | Yes | Tokens this wallet accepts. At least one required. |
+| `network` | string | No | `"mainnet"` or `"testnet"`. Defaults to `"mainnet"`. |
+
+Use the `Chain` and `Token` enums from `@prudra/core`:
+
+```typescript
+import { Chain, Token } from '@prudra/core';
+
+// Chain enum values
+Chain.BASE       // 'base'      — chainId: 8453
+Chain.ETHEREUM   // 'ethereum'  — chainId: 1
+Chain.OPTIMISM   // 'optimism'  — chainId: 10
+Chain.ARBITRUM   // 'arbitrum'  — chainId: 42161
+Chain.POLYGON    // 'polygon'   — chainId: 137
+Chain.TEMPO      // 'tempo'     — chainId: 4217
+
+// Token enum values
+Token.USDC       // 'USDC'
+Token.USDT       // 'USDT'
+Token.USDC_E     // 'USDC.e' (Tempo)
+```
+
+## Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Wallet ID. Prefix: `mwt_`. Use in `walletMiddleware({ walletId })`. |
+| `address` | string | The EVM wallet address. Share this with anyone sending funds to this wallet. |
+| `chain` | string | The chain this wallet is on. |
+| `chainId` | number | The numeric chain ID. |
+| `provisionStatus` | string | `"active"` when ready. `"provisioning"` briefly at creation. |
+| `supportedTokens` | string[] | Tokens configured for this wallet. |
+| `keyVersion` | string | Opaque key version identifier. Used internally — you don't need to store this. |
+| `createdAt` | string | ISO timestamp of creation. |
+
+## After provisioning
+
+Once the wallet is provisioned:
+
+1. Use the wallet ID in `walletMiddleware`: `walletMiddleware({ walletId: wallet.id })`
+2. Share the wallet `address` with agents or fund it directly
+3. Verify the wallet is active by checking `provisionStatus === 'active'`
+
+## Plan limits
+
+| Plan | Managed wallets | Chains |
+|---|---|---|
+| Hobby | 1 managed wallet | 1 chain |
+| Pro | 1 managed wallet | 5 chains |
+| Enterprise | Unlimited | Unlimited |
+
+Attempting to provision beyond the limit returns:
+
+```json
+{
+  "type": "https://api.prudra.dev/problems/managed-wallet-limit-reached",
+  "title": "Limit Reached",
+  "status": 429
+}
+```
+
+## Error handling
+
+| Error | Status | Cause | Resolution |
+|---|---|---|---|
+| `managed-wallet-limit-reached` | 429 | Plan limit exceeded | Upgrade to Pro or Enterprise |
+| `chain-limit-reached` | 429 | Too many active chains | Upgrade plan or use fewer chains |
+| `chain-not-supported` | 422 | Invalid chain value | See [supported chains](/wallets/managed/supported-chains) |
+
+## Next steps
+
+- [Derive child addresses](/wallets/managed/child-addresses) — issue per-customer addresses from this wallet
+- [Check a wallet balance](/wallets/managed/check-balance) — verify funds after provisioning
+- [Accept a payment](/payments/accept-a-payment) — use this wallet in payMiddleware

@@ -1,0 +1,93 @@
+---
+title: "Replay attack protection"
+description: "How Prudra prevents double-spending — UNIQUE constraint on txHash at the Postgres level."
+---
+
+## Replay attack protection
+
+A replay attack on a payment system occurs when a valid payment credential (transaction hash or signed authorization) is submitted more than once to get double the service. Prudra prevents this with a UNIQUE constraint at the database level — not at the application level.
+
+## Why database-level, not application-level
+
+Application-level uniqueness checks have a race condition window. Two concurrent requests carrying the same `txHash` can both pass the application-level check before either write commits to the database:
+
+```
+Request A: SELECT txHash FROM payments WHERE txHash = '0xabc' → 0 rows
+Request B: SELECT txHash FROM payments WHERE txHash = '0xabc' → 0 rows (race)
+Request A: INSERT INTO payments (txHash = '0xabc') → succeeds
+Request B: INSERT INTO payments (txHash = '0xabc') → succeeds (race won)
+```
+
+Both requests succeed. Double payment accepted.
+
+A UNIQUE constraint closes this window atomically. The database guarantees that exactly one INSERT for a given `txHash` succeeds, even under concurrent load:
+
+```sql
+ALTER TABLE payments ADD CONSTRAINT payments_txhash_unique UNIQUE (tx_hash);
+```
+
+The second INSERT raises a unique violation error, which Prudra catches and returns as a 409.
+
+## The 409 response
+
+When a duplicate payment is detected:
+
+```json
+{
+  "type":   "https://api.prudra.dev/problems/duplicate-payment",
+  "title":  "Duplicate Payment",
+  "status": 409,
+  "detail": "This transaction has already been used to pay for a request."
+}
+```
+
+The agent should not retry with the same credential. It must use a new transaction (or, for x402, a new ERC-3009 authorization with a new nonce).
+
+## What gets a UNIQUE constraint
+
+| Protocol | Unique field | Scope |
+|---|---|---|
+| x402 | ERC-3009 nonce | Per USDC contract |
+| MPP | Transaction hash | Globally |
+
+For x402, the nonce is part of the signed ERC-3009 data. A new signing operation generates a new random nonce — so even if the same agent signs the same amount to the same recipient, the nonces differ.
+
+For MPP, the `txHash` of the Tempo transaction is globally unique by design — no two transactions can have the same hash.
+
+## Testing replay protection
+
+```bash
+# Get a 402 challenge
+curl -i -X POST http://localhost:4001/summarise \
+  -H "Content-Type: application/json" \
+  -d '{"text": "test"}'
+
+# Use stub mode to trigger a payment
+curl -X POST http://localhost:4001/summarise \
+  -H "Content-Type: application/json" \
+  -H "X-PAYMENT: stub_payment_abc123" \
+  -d '{"text": "test"}'
+# → 200
+
+# Try to use the same stub payment credential again
+curl -X POST http://localhost:4001/summarise \
+  -H "Content-Type: application/json" \
+  -H "X-PAYMENT: stub_payment_abc123" \
+  -d '{"text": "test"}'
+# → 409 duplicate-payment
+```
+
+<Note>
+  In stub mode, Prudra uses the stub credential value itself as the txHash for uniqueness checking. This lets you test replay protection without real transactions.
+</Note>
+
+## No action required
+
+Replay protection is handled automatically by Prudra middleware. You don't need to implement any uniqueness checking in your handler code. If a 409 is returned to your handler (which shouldn't happen — the middleware catches it before your handler runs), it means a concurrent request with the same credential slipped through, which is not possible with the UNIQUE constraint in place.
+
+## Related
+
+- [Prevent challenge harvesting](/payments/security/harvesting) — rate limiting and no-challenge-on-error
+- [Payment audit logs](/payments/security/audit-logs) — how payments are logged for audit
+- [How x402 works](/payments/x402/how-it-works) — the nonce in ERC-3009 signing
+- [How MPP works](/payments/mpp/how-it-works) — txHash verification on Tempo

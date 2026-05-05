@@ -1,0 +1,68 @@
+---
+title: "Wallets overview"
+description: "Receive payments, monitor deposits, send transfers, and withdraw to a bank — managed wallets or your own."
+---
+
+## Wallets overview
+
+Prudra wallets are where payment proceeds land. Every time an agent pays a Prudra-protected endpoint, the payment settles to a wallet address registered in your organisation. Prudra supports two wallet types: managed wallets (Prudra custodies the private key) and BYO wallets (you keep the key, Prudra monitors the address).
+
+Beyond receiving payments, managed wallets can initiate transfers between chains and tokens, and request withdrawals to registered bank accounts.
+
+## Choose a wallet type
+
+<CardGroup cols={2}>
+  <Card title="Managed wallets" icon="key" href="/wallets/managed/overview">
+    Prudra generates and custodies the private key using envelope encryption. You get an address — funding goes there, Prudra holds the key securely. Required for outbound transfers and bank withdrawals.
+  </Card>
+  <Card title="BYO wallets" icon="building-columns" href="/wallets/byo/overview">
+    You own the private key. Register any existing EVM wallet address and Prudra monitors it for deposits using blockchain address monitoring. No custody — read-only monitoring.
+  </Card>
+</CardGroup>
+
+## Wallet capabilities
+
+| Capability | Managed | BYO |
+|---|---|---|
+| Receive payments | ✓ | ✓ |
+| Monitor deposits | ✓ | ✓ |
+| Check balance | ✓ | ✓ |
+| View transactions | ✓ | ✓ |
+| Send transfers | ✓ | — |
+| Bridge across chains | ✓ | — |
+| Withdraw to bank | ✓ | — |
+| Child addresses | ✓ | — |
+
+## Recommendation
+
+**For new integrations:** Start with a BYO wallet using an existing address if you already have one. Register it and you're receiving payments in minutes.
+
+**Upgrade to managed when:** You need to initiate outbound transfers, bridge tokens across chains, withdraw to a bank account, or issue unique child addresses to customers.
+
+## Transfers
+
+Managed wallets can send token transfers to any EVM address. Prudra automatically selects the optimal transfer route:
+
+- **Direct** — same chain, same token: a standard ERC-20 transfer (fastest, cheapest)
+- **Swap** — same chain, different token: an on-chain swap (protocol fees apply)
+- **Bridge** — different chain: a cross-chain bridge (takes 1–20 minutes)
+
+<Card title="Token transfers" icon="arrow-right-arrow-left" href="/wallets/transfers/overview">
+  Send tokens anywhere. Prudra handles routing, swap, and bridging automatically.
+</Card>
+
+## Withdrawals
+
+Withdraw from a managed wallet to a registered bank account. Prudra transfers crypto to its exchange address on-chain (verifiable via txHash), converts to fiat, and sends a bank wire. Expect 2–3 business days.
+
+<Card title="Withdrawals" icon="bank" href="/wallets/withdrawals/overview">
+  Convert crypto to fiat and receive a bank wire in GBP, USD, or EUR.
+</Card>
+
+## Related
+
+- [Choose a wallet type](/wallets/choose-wallet-type) — decision guide with comparison table
+- [Managed wallets](/wallets/managed/overview) — KMS encryption, child addresses, balance checking
+- [BYO wallets](/wallets/byo/overview) — register, monitor, deregister
+- [Transfers](/wallets/transfers/overview) — same-chain, cross-chain, and swap
+- [Withdrawals](/wallets/withdrawals/overview) — bank account setup and withdrawal tracking

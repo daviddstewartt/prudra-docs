@@ -1,0 +1,130 @@
+---
+title: "Payment audit logs"
+description: "Every payment creates an audit log entry — query by API key, route, protocol, or date range."
+---
+
+## Payment audit logs
+
+Every successful payment creates a `PaymentLog` record in Prudra's database. Audit logs let you trace which API key was used for each payment, which endpoint was called, how much was paid, and which vault was created.
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard support for viewing payment logs is coming soon. Use the API to query logs programmatically.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import { listPaymentLogs } from '@prudra/payments';
+
+// List all recent payment logs
+const logs = await listPaymentLogs({
+  limit: 50,
+});
+
+for (const log of logs) {
+  console.log(`${log.createdAt} | ${log.protocol} | $${log.amount} | ${log.routePath}`);
+}
+
+// Filter by route
+const routeLogs = await listPaymentLogs({
+  routePath: '/analyse',
+  limit: 100,
+});
+
+// Filter by protocol
+const x402Logs = await listPaymentLogs({
+  protocol: 'x402',
+});
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+# List payment logs
+curl https://api.prudra.dev/payments \
+  -H "Authorization: Bearer prv_test_sk_..."
+
+# Filter by route
+curl "https://api.prudra.dev/payments?routePath=/analyse" \
+  -H "Authorization: Bearer prv_test_sk_..."
+
+# Filter by protocol
+curl "https://api.prudra.dev/payments?protocol=x402&limit=100" \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+{
+  "data": [
+    {
+      "id":            "plog_clx1abc123",
+      "organisationId": "org_clx1xyz",
+      "accountId":     "acc_clx1def",
+      "apiKeyId":      "key_clx1ghi",
+      "routePath":     "/analyse",
+      "protocol":      "x402",
+      "amount":        "0.05",
+      "currency":      "USD",
+      "txHash":        "0xabc...",
+      "paymentId":     "pay_clx1jkl",
+      "vaultId":       "vlt_clx1mno",
+      "createdAt":     "2026-04-30T09:00:00.000Z"
+    }
+  ],
+  "total": 1,
+  "hasMore": false
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Log fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique log ID |
+| `organisationId` | string | The organisation that owns this log |
+| `accountId` | string | The account that created the API key used |
+| `apiKeyId` | string | The specific API key used — links to the key that received payment |
+| `routePath` | string | The endpoint that was called (e.g. `/analyse`) |
+| `protocol` | string | Payment protocol used: `'x402'` or `'mpp'` |
+| `amount` | string | Amount paid in USD |
+| `currency` | string | Always `'USD'` in Phase 1 |
+| `txHash` | string | On-chain transaction hash. Verify on the relevant chain's explorer. |
+| `paymentId` | string | The internal Payment record ID |
+| `vaultId` | string | The vault created for this payment (if any) |
+| `createdAt` | string | ISO timestamp of the payment |
+
+## The apiKeyId field
+
+The `apiKeyId` field is particularly useful for multi-service deployments. If you issue separate API keys for different services, each payment log includes which key was used. This lets you:
+
+- Attribute revenue to specific services
+- Detect unexpected usage from an API key
+- Revoke a key if it shows unusual payment patterns
+- Audit which service triggered which vault creation
+
+## Query parameters
+
+| Parameter | Description |
+|---|---|
+| `routePath` | Filter by endpoint path |
+| `protocol` | Filter by `'x402'` or `'mpp'` |
+| `apiKeyId` | Filter by specific API key |
+| `limit` | Maximum results (default: 50, max: 500) |
+| `cursor` | Pagination cursor from previous response |
+| `startDate` | ISO timestamp — payments after this date |
+| `endDate` | ISO timestamp — payments before this date |
+
+## Related
+
+- [Replay attack protection](/payments/security/replay) — how txHash uniqueness prevents fraud
+- [Prevent challenge harvesting](/payments/security/harvesting) — rate limiting and error responses
+- [View usage](/platform/billing/usage) — billing usage vs. payment audit logs
+- [Manage API keys](/platform/orgs/api-keys) — create and revoke keys referenced in logs

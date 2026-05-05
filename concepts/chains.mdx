@@ -1,0 +1,43 @@
+---
+title: Chains
+description: Supported EVM networks for managed wallets, transfers, and monitoring — chain slugs match the API and @prudra/core.
+---
+
+## Overview
+
+Prudra identifies blockchains by a **stable string slug** (for example `base`, `arbitrum`, `tempo`). The same slug is used in REST bodies, SDK `Chain` constants, and configuration. Each slug maps to a numeric **chain id**, default RPC URL (typically via Alchemy), and confirmation defaults.
+
+## Supported chains (mainnet)
+
+| Slug | Typical chain id | Notes |
+| --- | --- | --- |
+| `tempo` | 4217 | Tempo network; MPP-oriented flows. |
+| `base` | 8453 | Coinbase L2. |
+| `ethereum` | 1 | Mainnet. |
+| `optimism` | 10 | OP Mainnet. |
+| `arbitrum` | 42161 | Arbitrum One. |
+| `polygon` | 137 | Polygon PoS. |
+
+Non-production environments may expose `base-sepolia`, `eth-sepolia`, and `tempo-moderato` for integration testing.
+
+## How Prudra uses chain slugs
+
+- **Provisioning** — `POST /wallet-infra/master-wallets` validates `chain` against the server allowlist.
+- **Transfers** — `fromChain` and `toChain` must both be supported and have RPC configuration (or `PAYMENT_STUB_MODE` for development).
+- **Token contracts** — Per-chain token addresses live in server config (`tokens.ts`); unsupported pairs return `422` with a clear validation error.
+
+## SDK
+
+`@prudra/core` exports `Chain` and type `ChainType`:
+
+```typescript
+import { Chain } from '@prudra/core';
+
+const from = Chain.BASE;
+```
+
+## Related
+
+- [Tokens](/concepts/tokens) — symbols per chain.
+- [Token transfers](/concepts/token-transfers) — routing across chains.
+- [Managed wallets](/concepts/managed-wallets) — one master per chain per org (subject to plan).

@@ -1,0 +1,83 @@
+---
+title: "Supported chains and tokens"
+description: "Which chains and tokens BYO wallets support, and ERC-3009 availability."
+---
+
+## Supported chains and tokens
+
+BYO wallets support a subset of the chains available for managed wallets. Unlike managed wallets, BYO wallets on Tempo are not supported in Phase 1 — address monitoring is only available on EVM-compatible chains.
+
+## Supported chains
+
+| Chain | Chain ID | Tokens | x402 (ERC-3009) | Deposit monitoring | Testnet |
+|---|---|---|---|---|---|
+| Base | 8453 | USDC | ✓ | ✓ | Base Sepolia (84532) |
+| Ethereum | 1 | USDC, USDT | ✓ | ✓ | Sepolia (11155111) |
+| Optimism | 10 | USDC | ✓ | ✓ | OP Sepolia (11155420) |
+| Arbitrum | 42161 | USDC | ✓ | ✓ | Arbitrum Sepolia (421614) |
+| Polygon | 137 | USDC | ✓ | ✓ | Polygon Amoy (80002) |
+| Tempo | 4217 | — | — | — | — |
+
+Tempo is not supported for BYO wallets in Phase 1. Use a managed wallet for Tempo/MPP payments.
+
+## Using the Chain enum
+
+```typescript
+import { initialise, Chain, Token } from '@prudra/core';
+import { registerBYOWallet } from '@prudra/wallet';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+// Base USDC wallet
+const baseWallet = await registerBYOWallet({
+  address:         '0x742d35Cc...',
+  chain:           Chain.BASE,
+  supportedTokens: [Token.USDC],
+});
+
+// Ethereum wallet monitoring both USDC and USDT
+const ethWallet = await registerBYOWallet({
+  address:         '0x742d35Cc...',
+  chain:           Chain.ETHEREUM,
+  supportedTokens: [Token.USDC, Token.USDT],
+});
+```
+
+## Token details
+
+| Token | Contract standard | Chains |
+|---|---|---|
+| USDC | ERC-20, ERC-3009 | Base, Ethereum, Optimism, Arbitrum, Polygon |
+| USDT | ERC-20 | Ethereum |
+
+USDC implements ERC-3009 (transferWithAuthorization), which is required for x402 payments. USDT does not implement ERC-3009 — it can be monitored for deposits but cannot be used in x402 payment flows.
+
+## Monitoring scope
+
+When you register a BYO wallet with `supportedTokens: [Token.USDC]`, Prudra only fires `deposit.success` webhooks for USDC transfers. Other token transfers to the same address are ignored.
+
+To monitor multiple tokens, include them all in `supportedTokens`:
+
+```typescript
+await registerBYOWallet({
+  address:         '0x742d35Cc...',
+  chain:           Chain.ETHEREUM,
+  supportedTokens: [Token.USDC, Token.USDT],  // both monitored
+});
+```
+
+## Plan limits
+
+| Plan | BYO wallets |
+|---|---|
+| Hobby | 1 |
+| Pro | 5 |
+| Enterprise | Unlimited |
+
+Each registered BYO wallet counts against your plan limit regardless of how many tokens it monitors. One wallet address on one chain = one slot.
+
+## Related
+
+- [Register a BYO wallet](/wallets/byo/register) — registration guide
+- [Monitor deposits](/wallets/byo/monitor-deposits) — how deposit detection works
+- [Managed wallet chains](/wallets/managed/supported-chains) — chains available for managed wallets

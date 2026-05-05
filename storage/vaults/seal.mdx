@@ -1,0 +1,116 @@
+---
+title: "Seal a vault"
+description: "Mark work complete, close the vault for writes, and signal subscribers that the stream is done."
+---
+
+## Seal a vault
+
+Sealing a vault marks work as complete. After sealing:
+- No further documents, files, or events can be written
+- The SSE event stream closes, signalling to subscribers that the job is done
+- The vault enters a read-only state while its TTL continues to count down
+
+## Sealing via vaultMiddleware
+
+When using `vaultMiddleware`, call `vault.seal()` before responding:
+
+```typescript
+app.post('/analyse', walletMiddleware(...), payMiddleware(...), vaultMiddleware(), async (req, res) => {
+  const vault = req.vault!;
+
+  await vault.addDocument({ result: 'done' }, 'Analysis result');
+
+  // Seal before responding — closes SSE stream, marks vault read-only
+  await vault.seal('Analysis complete');
+
+  res.json({ vaultId: vault.id });
+});
+```
+
+## Sealing via API
+
+<Tabs>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { sealVault } from '@prudra/vault';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+await sealVault({
+  vaultId: 'vlt_clx1abc123',
+  summary: 'Processed 47 items successfully',
+});
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X POST https://api.prudra.dev/vaults/vlt_clx1abc123/seal \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "summary": "Processed 47 items successfully" }'
+```
+
+Response:
+
+```json
+{
+  "id":       "vlt_clx1abc123",
+  "status":   "sealed",
+  "summary":  "Processed 47 items successfully",
+  "sealedAt": "2026-04-30T09:05:00.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vaultId` | string | Yes | The vault to seal |
+| `summary` | string | No | Human-readable summary stored on the vault record |
+
+## What sealing triggers
+
+When a vault is sealed, Prudra fires a `vault.sealed` webhook to all registered webhook URLs:
+
+```json
+{
+  "type":    "vault.sealed",
+  "eventId": "evt_clx1abc123",
+  "payload": {
+    "vaultId": "vlt_clx1abc123",
+    "summary": "Processed 47 items successfully",
+    "sealedAt": "2026-04-30T09:05:00.000Z"
+  }
+}
+```
+
+Use this webhook to notify your users that results are ready, or to trigger downstream processing.
+
+## Sealing before the job finishes
+
+If your handler responds before work is complete (e.g., streaming results asynchronously), do not seal immediately. Seal only when all writes are done:
+
+```typescript
+res.json({ vaultId: vault.id });  // respond first
+
+setImmediate(async () => {
+  // Continue working after response
+  for (const item of items) {
+    await vault.emit('progress', { item });
+  }
+  await vault.seal('All items processed');  // seal when truly done
+});
+```
+
+## Related
+
+- [Events](/storage/events/overview) — SSE stream that sealing closes
+- [Persist a vault](/storage/vaults/persist) — extend lifetime after sealing
+- [Webhooks event reference](/webhooks/event-reference) — `vault.sealed` payload schema

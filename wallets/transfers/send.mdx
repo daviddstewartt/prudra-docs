@@ -1,0 +1,139 @@
+---
+title: "Send a transfer"
+description: "Full API reference for the transfer() function — parameters, response, and error handling."
+---
+
+## Send a transfer
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard support for initiating transfers is coming soon. Use the SDK or cURL.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import { initialise, Chain, Token } from '@prudra/core';
+import { transfer } from '@prudra/wallet';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+// Direct transfer — same chain, same token
+const tx = await transfer({
+  fromWalletId:   'mwt_clx1abc123',
+  fromWalletType: 'master',
+  fromToken:      Token.USDC,
+  toAddress:      '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
+  toChain:        Chain.BASE,
+  toToken:        Token.USDC,
+  amount:         '10.00',
+});
+
+console.log(tx.id);      // 'wtx_clx1abc123'
+console.log(tx.route);   // 'direct'
+console.log(tx.txHash);  // '0xabc...'
+console.log(tx.status);  // 'confirmed'
+
+// Transfer from a child address
+const childTx = await transfer({
+  fromWalletId:   'child_clx1abc123',
+  fromWalletType: 'child',           // ← child, not master
+  fromToken:      Token.USDC,
+  toAddress:      '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
+  toChain:        Chain.BASE,
+  toToken:        Token.USDC,
+  amount:         '0.50',
+});
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X POST https://api.prudra.dev/wallet-infra/transfers \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fromWalletId":   "mwt_clx1abc123",
+    "fromWalletType": "master",
+    "fromToken":      "USDC",
+    "toAddress":      "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+    "toChain":        "base",
+    "toToken":        "USDC",
+    "amount":         "10.00"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id":          "wtx_clx1abc123",
+  "walletId":    "mwt_clx1abc123",
+  "route":       "direct",
+  "direction":   "outbound",
+  "fromToken":   "USDC",
+  "toToken":     "USDC",
+  "fromChain":   "base",
+  "toChain":     "base",
+  "amount":      "10.00",
+  "rawAmount":   "10000000",
+  "toAddress":   "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+  "txHash":      "0xabc...",
+  "status":      "confirmed",
+  "confirmedAt": "2026-04-30T09:00:00.000Z",
+  "createdAt":   "2026-04-30T08:59:58.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `fromWalletId` | string | Yes | The managed wallet or child address ID to send from |
+| `fromWalletType` | `'master'` \| `'child'` | Yes | Whether the source is a master wallet or child address |
+| `fromToken` | Token | Yes | The token to send from the source wallet |
+| `toAddress` | string | Yes | Recipient EVM address |
+| `toChain` | Chain | Yes | Destination chain |
+| `toToken` | Token | Yes | Token the recipient receives |
+| `amount` | string | Yes | Amount as a decimal string (e.g., `"10.00"`) |
+
+## Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | WalletTransaction ID (`wtx_...`) |
+| `walletId` | string | Source wallet ID |
+| `route` | string | `direct`, `lifi-swap`, or `lifi-bridge` |
+| `direction` | string | Always `outbound` for transfers |
+| `fromToken` | string | Token symbol sent |
+| `toToken` | string | Token symbol received |
+| `fromChain` | string | Source chain |
+| `toChain` | string | Destination chain |
+| `amount` | string | Human-readable amount |
+| `rawAmount` | string | Amount in token smallest unit |
+| `toAddress` | string | Recipient address |
+| `txHash` | string | On-chain transaction hash |
+| `status` | string | `confirmed` (direct/swap) or `pending` (bridge) |
+| `confirmedAt` | string \| null | ISO timestamp of confirmation, null while pending |
+| `createdAt` | string | ISO timestamp of creation |
+
+## Error handling
+
+| Error | Status | Cause | Resolution |
+|---|---|---|---|
+| `insufficient-balance` | 422 | Not enough tokens in the source wallet | Check balance with `getBalance()` |
+| `wallet-not-found` | 404 | Wallet ID does not exist | Verify the wallet ID |
+| `address-format-invalid` | 422 | `toAddress` is not a valid EVM address | Use a checksummed or lowercase EVM address |
+| `unsupported-token-pair` | 422 | Token pair has no swap route | Use a supported token on the destination chain |
+| `bridge-unavailable` | 503 | Li.Fi bridge temporarily unavailable | Retry with exponential backoff |
+
+## Related
+
+- [Transfer routing](/wallets/transfers/routing) — how routes are selected
+- [Cross-chain transfers](/wallets/transfers/cross-chain) — handling pending bridge status
+- [Track status](/wallets/transfers/track-status) — polling and webhooks

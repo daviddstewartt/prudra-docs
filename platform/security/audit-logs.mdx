@@ -1,0 +1,105 @@
+---
+title: "Audit logs"
+description: "Payment logs, key usage events, and compliance exports for your organisation."
+---
+
+## Audit logs
+
+Prudra maintains a full audit trail of payment events, key usage, and account activity. Logs are accessible via the API and dashboard.
+
+## Payment logs
+
+Every payment verification creates a `PaymentLog` record:
+
+```bash
+curl "https://api.prudra.dev/payments/logs?limit=50" \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+[
+  {
+    "id":          "log_clx1abc123",
+    "route":       "/api/generate",
+    "method":      "POST",
+    "amount":      "0.10",
+    "token":       "USDC",
+    "chain":       "base",
+    "protocol":    "x402",
+    "txHash":      "0xabc...",
+    "walletId":    "mwt_clx1abc123",
+    "vaultId":     "vlt_clx1abc123",
+    "apiKeyId":    "key_clx1abc123",
+    "status":      "verified",
+    "createdAt":   "2026-04-30T09:00:00.000Z"
+  }
+]
+```
+
+## Filter payment logs
+
+| Query parameter | Description |
+|---|---|
+| `route` | Filter by route path |
+| `protocol` | Filter by `x402` or `mpp` |
+| `walletId` | Filter by wallet |
+| `apiKeyId` | Filter by API key (useful to trace which server processed a payment) |
+| `from` | ISO timestamp start |
+| `to` | ISO timestamp end |
+| `limit` | Max records (default 50, max 1000) |
+
+```bash
+# All x402 payments on /api/generate in the last 24 hours
+curl "https://api.prudra.dev/payments/logs?route=/api/generate&protocol=x402&from=2026-04-29T00:00:00Z" \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+## Payment log summary
+
+Aggregate payment stats by route:
+
+```bash
+curl "https://api.prudra.dev/payments/logs/summary" \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+[
+  {
+    "route":        "/api/generate",
+    "totalPayments": 847,
+    "totalRevenue":  "84.70",
+    "token":         "USDC"
+  }
+]
+```
+
+## Key usage tracking
+
+The `apiKeyId` field on payment logs tells you which API key was used to verify each payment. Use this to trace which deployment or server processed a request:
+
+```bash
+# All payments from the production API key
+curl "https://api.prudra.dev/payments/logs?apiKeyId=key_prod_clx1abc123" \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+## Compliance export
+
+For compliance purposes, download a full payment log export:
+
+```bash
+curl "https://api.prudra.dev/payments/logs?from=2026-01-01&to=2026-04-30&limit=10000" \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  > payments-q1-2026.json
+```
+
+## Related
+
+- [Payment security — audit logs](/payments/security/audit-logs) — payment-focused audit log detail
+- [Security overview](/platform/security/overview) — full security model
+- [Billing usage](/platform/billing/usage) — aggregate usage stats

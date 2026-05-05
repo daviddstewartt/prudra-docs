@@ -1,0 +1,122 @@
+---
+title: "Add a bank account"
+description: "Register UK, US, or international bank accounts for withdrawals."
+---
+
+## Add a bank account
+
+Before requesting a withdrawal, register the destination bank account. Prudra supports UK sort code/account number, US routing/account number, and international IBAN/SWIFT accounts.
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Bank account management via the dashboard is coming soon. Use the SDK or cURL.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { addBankAccount, listBankAccounts } from '@prudra/wallet';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+// UK account
+const ukAccount = await addBankAccount({
+  accountName:   'Acme Ltd — Operations Account',
+  sortCode:      '20-00-00',
+  accountNumber: '12345678',
+  currency:      'GBP',
+});
+
+// US account
+const usAccount = await addBankAccount({
+  accountName:    'Acme Inc — Main Account',
+  routingNumber:  '021000021',
+  accountNumber:  '000123456789',
+  currency:       'USD',
+});
+
+// International (IBAN)
+const ibanAccount = await addBankAccount({
+  accountName:   'Acme GmbH — Operations',
+  iban:          'DE89370400440532013000',
+  swiftBic:      'COBADEFFXXX',
+  currency:      'EUR',
+});
+
+// List all registered accounts
+const accounts = await listBankAccounts();
+for (const a of accounts) {
+  console.log(`${a.id}  ${a.accountName}  (${a.currency})`);
+}
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+# UK account
+curl -X POST https://api.prudra.dev/withdrawals/bank-accounts \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "accountName":   "Acme Ltd — Operations Account",
+    "sortCode":      "20-00-00",
+    "accountNumber": "12345678",
+    "currency":      "GBP"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id":            "bank_clx1abc123",
+  "accountName":   "Acme Ltd — Operations Account",
+  "currency":      "GBP",
+  "maskedAccount": "****5678",
+  "createdAt":     "2026-04-30T09:00:00.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `accountName` | string | Yes | Human-readable name for this account |
+| `currency` | string | Yes | Fiat currency code: `GBP`, `USD`, `EUR` |
+| `sortCode` | string | UK only | UK 6-digit sort code (format: `20-00-00`) |
+| `accountNumber` | string | UK/US | 8-digit UK or US account number |
+| `routingNumber` | string | US only | 9-digit US ABA routing number |
+| `iban` | string | EU/international | IBAN (up to 34 chars) |
+| `swiftBic` | string | EU/international | BIC/SWIFT code (8 or 11 chars) |
+
+## Security
+
+Account numbers are masked in all API responses after registration. Prudra stores bank account details encrypted at rest and never logs plaintext account numbers.
+
+## Removing a bank account
+
+```bash
+curl -X DELETE https://api.prudra.dev/withdrawals/bank-accounts/bank_clx1abc123 \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Removing a bank account does not cancel in-flight withdrawals. Pending withdrawals to this account continue to process.
+
+## Error handling
+
+| Error | Status | Cause | Resolution |
+|---|---|---|---|
+| `invalid-sort-code` | 422 | Sort code format invalid | Use `DD-DD-DD` format |
+| `invalid-iban` | 422 | IBAN format or checksum invalid | Verify the IBAN with your bank |
+| `unsupported-currency` | 422 | Currency not supported | Use GBP, USD, or EUR |
+
+## Related
+
+- [Request a withdrawal](/wallets/withdrawals/request) — use this account to withdraw funds
+- [Currencies and limits](/wallets/withdrawals/currencies) — supported fiat currencies

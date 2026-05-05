@@ -1,0 +1,102 @@
+---
+title: "Handle the Authorization header"
+description: "The MPP Authorization: Payment credential format and how to parse and validate it."
+---
+
+## Handle the Authorization header
+
+An MPP payment credential is passed in the standard `Authorization` HTTP header using the `Payment` scheme. The value is a base64url-encoded JSON object. This page describes the credential format for developers building MPP-compatible agents or integrations.
+
+## The credential structure
+
+The `Authorization` header sent by an MPP agent looks like:
+
+```
+Authorization: Payment eyJpZCI6ImNoX2FiYzEyMyIsInR4SGFzaCI6IjB4YWJjLi4uIiwiZnJvbSI6IjB4QWdlbnQuLi4iLCJjaGFpbklkIjo0MjE3fQ==
+```
+
+Decoded, the payload is:
+
+```json
+{
+  "id":      "ch_abc123",
+  "txHash":  "0xabc...",
+  "from":    "0xAgentWallet...",
+  "chainId": 4217
+}
+```
+
+## Credential fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | The challenge ID from the `WWW-Authenticate` header. Prudra uses this to verify the credential belongs to a valid challenge. |
+| `txHash` | string | The on-chain transaction hash of the USDC.e transfer on Tempo. Must be a confirmed transaction. |
+| `from` | string | The agent's Tempo wallet address (the sender of the transaction). |
+| `chainId` | number | The Tempo chain ID: `4217` for mainnet. |
+
+## Parsing the credential in TypeScript
+
+```typescript
+import { parseMPPCredential } from '@prudra/payments';
+
+// From the Authorization header: "Payment eyJ..."
+const authHeader = request.headers['authorization'];
+
+if (!authHeader?.startsWith('Payment ')) {
+  throw new Error('Not an MPP credential');
+}
+
+const base64Credential = authHeader.slice('Payment '.length);
+const credential = parseMPPCredential(base64Credential);
+
+console.log(credential.id);      // "ch_abc123"
+console.log(credential.txHash);  // "0xabc..."
+console.log(credential.from);    // "0xAgentWallet..."
+console.log(credential.chainId); // 4217
+```
+
+## Building a credential (for agents)
+
+```typescript
+import { buildMPPCredential } from '@prudra/payments';
+
+const credential = buildMPPCredential({
+  id:      challenge.id,      // from the WWW-Authenticate header
+  txHash:  tx.hash,           // from the on-chain transaction
+  from:    wallet.address,    // agent's wallet address
+  chainId: 4217,              // Tempo mainnet
+});
+
+// credential is a base64url string
+// Use it as: Authorization: Payment <credential>
+```
+
+## What Prudra verifies
+
+When a request arrives with `Authorization: Payment <credential>`, Prudra verifies:
+
+1. **Challenge ID** — recomputes the HMAC from the echoed challenge parameters and compares with `crypto.timingSafeEqual()`. The challenge must be valid and unexpired.
+2. **Transaction** — fetches the receipt for `txHash` from the Tempo RPC. Receipt must be non-null (transaction confirmed).
+3. **Confirmations** — `currentBlock - txBlock >= 1` (Tempo Simplex Consensus, 1 confirmation is sufficient)
+4. **Recipient** — the `to` address in the transaction matches the server's registered wallet address
+5. **Amount** — the token transfer amount meets or exceeds the required price in USDC.e
+6. **Sender** — the `from` address in the credential matches the transaction sender
+7. **Replay** — the `txHash` has not been seen before (UNIQUE constraint in Postgres)
+
+If any check fails, Prudra returns 402 with a new challenge (if the request was unauthenticated) or a 402 with no new challenge (if the credential was malformed).
+
+## Security note on challenge reuse
+
+A valid challenge ID can only be used once per unique `txHash`. The combination of `(challengeId, txHash)` uniqueness is enforced at the DB level. However, the HMAC challenge ID itself is stateless — Prudra doesn't store challenge IDs. This means:
+
+- An attacker cannot forge a challenge ID without knowing the `MPP_CHALLENGE_SECRET`
+- An expired challenge's ID will fail HMAC verification (expiry is part of the signed input)
+- A valid `txHash` cannot be reused even with a new, valid challenge ID
+
+## Related
+
+- [How MPP works](/payments/mpp/how-it-works) — the full verification flow
+- [Add MPP to an endpoint](/payments/mpp/add-to-endpoint) — server-side configuration
+- [Test MPP payments](/payments/mpp/test) — building credentials in the test script
+- [Prevent challenge harvesting](/payments/security/harvesting) — why malformed credentials get no new challenge

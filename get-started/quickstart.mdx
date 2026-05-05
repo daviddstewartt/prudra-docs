@@ -1,0 +1,185 @@
+---
+title: "Your first payment in 5 minutes"
+description: "Add a payment-gated endpoint to an Express app and test it end-to-end — no real crypto required."
+---
+
+## Your first payment in 5 minutes
+
+This guide walks you through adding a payment-gated endpoint to an Express server using Prudra. By the end, you'll have a working endpoint that returns HTTP 402 when called without payment, accepts payment via either x402 or MPP, creates a vault, and returns the vault ID in the response.
+
+You'll use stub mode for testing — no real wallet or crypto needed.
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard support for creating paid endpoints is coming soon. Follow the API/SDK steps to get started.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+**Step 1 — Install the packages**
+
+```bash
+npm install @prudra/core @prudra/express
+# or
+pnpm add @prudra/core @prudra/express
+```
+
+**Step 2 — Get an API key**
+
+Sign up at [dashboard.prudra.com](https://dashboard.prudra.com) and create an API key. Test keys start with `prv_test_sk_`.
+
+Add it to your `.env`:
+
+```bash
+PRUDRA_API_KEY=prv_test_sk_your_key_here
+BYO_WALLET_ID=byw_your_wallet_id_here
+```
+
+**Step 3 — Write the server**
+
+Create `server.ts`:
+
+```typescript
+import express from 'express';
+import { initialise } from '@prudra/core';
+import {
+  walletMiddleware,
+  payMiddleware,
+  vaultMiddleware,
+} from '@prudra/express';
+
+// Initialise the Prudra SDK with your API key
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const app = express();
+app.use(express.json());
+
+// Register the wallet that receives payments (organisation-wide)
+app.use(walletMiddleware({ walletId: process.env.BYO_WALLET_ID }));
+
+// Add a payment-gated endpoint
+app.post(
+  '/summarise',
+  payMiddleware({ price: '0.01', description: 'Text summarisation' }),
+  vaultMiddleware(),
+  async (req, res) => {
+    const { text } = req.body as { text: string };
+
+    // This code only runs after payment is verified
+    const summary = `Summary of "${text.slice(0, 60)}..."`;
+
+    // Store the result in the vault created by payMiddleware
+    await req.vault!.addDocument(
+      { input: text, summary, model: 'example-v1' },
+      'Summarisation result'
+    );
+
+    // Seal the vault — no more writes after this
+    await req.vault!.seal('Summarisation complete');
+
+    res.json({
+      vaultId: req.vault!.id,
+      summary,
+      payment: {
+        protocol: req.payment!.protocol,  // 'x402' | 'mpp'
+        amount:   req.payment!.amount,
+        txHash:   req.payment!.txHash,
+      },
+    });
+  }
+);
+
+app.listen(4001, () => console.log('Running on :4001'));
+```
+
+**Step 4 — Start the server**
+
+```bash
+npx ts-node server.ts
+```
+
+  </Tab>
+</Tabs>
+
+## Test the endpoint
+
+**Without payment — expect HTTP 402:**
+
+```bash
+curl -i -X POST http://localhost:4001/summarise \
+  -H "Content-Type: application/json" \
+  -d '{"text": "The quick brown fox jumps over the lazy dog."}'
+```
+
+Response:
+
+```
+HTTP/1.1 402 Payment Required
+WWW-Authenticate: Payment id="ch_abc123", realm="localhost", method="tempo", intent="charge", request="eyJ..."
+PAYMENT-REQUIRED: eyJwcmljZSI6IjAuMDEiLCJjdXJyZW5jeSI6IlVTREMi...
+Cache-Control: no-store
+Content-Type: application/problem+json
+
+{
+  "type": "https://api.prudra.dev/problems/payment-required",
+  "title": "Payment Required",
+  "status": 402,
+  "detail": "See WWW-Authenticate (MPP) or PAYMENT-REQUIRED (x402)."
+}
+```
+
+Both challenge headers are present. A calling agent uses one of them to pay.
+
+**With stub payment — bypass real crypto for testing:**
+
+```bash
+curl -X POST http://localhost:4001/summarise \
+  -H "Content-Type: application/json" \
+  -H "X-PAYMENT: stub_payment_accepted" \
+  -d '{"text": "The quick brown fox jumps over the lazy dog."}'
+```
+
+Response:
+
+```json
+{
+  "vaultId": "vlt_clx1abc123",
+  "summary": "Summary of \"The quick brown fox jumps over the lazy dog...\"",
+  "payment": {
+    "protocol": "mpp",
+    "amount": "0.01",
+    "txHash": "stub_0xabc123"
+  }
+}
+```
+
+The `vaultId` is the ID of the vault that was created for this payment. Your agent can use it to retrieve the result later via `GET https://api.prudra.dev/vaults/<vaultId>`.
+
+<Note>
+  Stub mode (`X-PAYMENT: stub_payment_accepted`) only works when `PAYMENT_STUB_MODE=true` is set on the server. This is the default in development. Never enable stub mode in production.
+</Note>
+
+## What happened
+
+1. The `walletMiddleware` attached your wallet to the request context — payment goes to that wallet
+2. The `payMiddleware` checked for a payment credential
+3. Without one, it generated both an x402 and MPP challenge and returned 402
+4. With the stub payment, it skipped real verification and proceeded
+5. The `vaultMiddleware` created a new vault and attached it to `req.vault`
+6. Your handler ran, wrote a document to the vault, sealed it, and returned the vault ID
+
+## Error handling
+
+| Error | Cause | Resolution |
+|---|---|---|
+| `401 Unauthorized` | Missing or invalid API key | Check `PRUDRA_API_KEY` in your env. Keys start with `prv_test_sk_` for test mode. |
+| `WALLET_NOT_CONFIGURED` | `walletMiddleware` can't find a wallet | Set `BYO_WALLET_ID` in your env, or provision a managed wallet. |
+| `vault-quota-exceeded` | You've hit your plan's active vault limit | Seal existing vaults or upgrade your plan. |
+
+## Next steps
+
+- [How Prudra works](/get-started/core-concepts) — understand the 402 flow, vaults, and wallets in depth
+- [Accept a payment](/payments/accept-a-payment) — the full middleware chain with all options
+- [Add session payments](/payments/sessions/add) — one payment covering multiple requests
+- [Subscribe to vault events](/storage/events/subscribe) — real-time streaming from a vault

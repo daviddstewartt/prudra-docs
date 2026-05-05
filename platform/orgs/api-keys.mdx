@@ -1,0 +1,85 @@
+---
+title: "API keys"
+description: "Create test and live API keys, understand key formats, and revoke keys."
+---
+
+## API keys
+
+API keys authenticate requests to the Prudra API. Each organisation has separate test and live keys.
+
+## Key formats
+
+| Format | Environment | Example |
+|---|---|---|
+| `prv_test_sk_...` | Test (sandbox) | `prv_test_sk_abc123...` |
+| `prv_live_sk_...` | Live (production) | `prv_live_sk_abc123...` |
+
+Test keys use testnet RPC and simulated payments. Live keys use mainnet and process real transactions. Never use live keys in development.
+
+## Create an API key
+
+<Tabs>
+  <Tab title="Dashboard">
+    Go to **Settings → API Keys** and click **Create key**.
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X POST https://api.prudra.dev/organisations/current/api-keys \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name":        "Production server",
+    "environment": "live"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id":          "key_clx1abc123",
+  "name":        "Production server",
+  "key":         "prv_live_sk_clx1abc123...",
+  "environment": "live",
+  "createdAt":   "2026-04-30T09:00:00.000Z"
+}
+```
+
+<Warning>
+  The `key` value is shown only once. Copy it and store it securely in your secrets manager.
+</Warning>
+
+  </Tab>
+</Tabs>
+
+## List API keys
+
+```bash
+curl https://api.prudra.dev/organisations/current/api-keys \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+API key values are not included in list responses — only IDs and metadata.
+
+## Revoke an API key
+
+```bash
+curl -X DELETE https://api.prudra.dev/organisations/current/api-keys/key_clx1abc123 \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Revocation takes effect immediately. Any server using the revoked key will start receiving 401 errors. Issue a new key before revoking the old one.
+
+## Best practices
+
+- Store keys in environment variables, never in code
+- Use separate keys per deployment (staging vs production)
+- Rotate keys regularly — create new, update servers, revoke old
+- Revoke keys immediately if they may have been exposed
+
+## Related
+
+- [Authentication](/get-started/authentication) — how to use API keys in requests
+- [Members](/platform/organisations/members) — control who can create keys
+- [Security overview](/platform/security/overview) — key custody model

@@ -1,0 +1,119 @@
+---
+title: "Register a webhook"
+description: "Register, update, and delete webhook endpoints to receive Prudra events."
+---
+
+## Register a webhook
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard webhook management is coming soon. Use the SDK or cURL.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { registerWebhook, listWebhooks, deleteWebhook } from '@prudra/webhooks';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+// Register
+const webhook = await registerWebhook({
+  url:    'https://your-server.com/webhooks/prudra',
+  events: ['payment.received', 'vault.sealed', 'deposit.success'],
+});
+
+console.log(webhook.id);     // 'wh_clx1abc123'
+console.log(webhook.secret); // 'whsec_...' — save this, shown only once
+
+// List all webhooks
+const webhooks = await listWebhooks();
+
+// Delete
+await deleteWebhook({ webhookId: 'wh_clx1abc123' });
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+# Register
+curl -X POST https://api.prudra.dev/webhooks \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url":    "https://your-server.com/webhooks/prudra",
+    "events": ["payment.received", "vault.sealed", "deposit.success"]
+  }'
+```
+
+Response:
+
+```json
+{
+  "id":        "wh_clx1abc123",
+  "url":       "https://your-server.com/webhooks/prudra",
+  "events":    ["payment.received", "vault.sealed", "deposit.success"],
+  "secret":    "whsec_clx1abc123...",
+  "createdAt": "2026-04-30T09:00:00.000Z"
+}
+```
+
+<Warning>
+  The `secret` field is only returned on registration. Copy and store it securely — it is never shown again.
+</Warning>
+
+```bash
+# List webhooks
+curl https://api.prudra.dev/webhooks \
+  -H "Authorization: Bearer prv_test_sk_..."
+
+# Delete
+curl -X DELETE https://api.prudra.dev/webhooks/wh_clx1abc123 \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+  </Tab>
+</Tabs>
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `url` | string | Yes | HTTPS endpoint to deliver events to |
+| `events` | string[] | Yes | List of event types to subscribe to. Use `["*"]` for all events. |
+
+## Available event types
+
+| Event | When fired |
+|---|---|
+| `payment.received` | Payment successfully verified |
+| `vault.sealed` | Vault sealed by your handler |
+| `vault.expiring` | Vault will expire within 1 hour |
+| `vault.expired` | Vault has expired and been deleted |
+| `deposit.success` | Deposit detected on a BYO wallet |
+| `transfer.completed` | Bridge transfer confirmed on destination chain |
+| `transfer.failed` | Bridge transfer failed, funds refunded |
+| `withdrawal.completed` | Bank wire received at destination |
+| `withdrawal.failed` | Withdrawal processing failed |
+
+Use `["*"]` to subscribe to all current and future event types.
+
+## Update a webhook
+
+```bash
+curl -X PATCH https://api.prudra.dev/webhooks/wh_clx1abc123 \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": ["payment.received", "vault.sealed", "deposit.success", "transfer.completed"]
+  }'
+```
+
+## Related
+
+- [Verify signatures](/webhooks/verify-signatures) — how to verify HMAC signatures
+- [Retry behaviour](/webhooks/retry-behaviour) — delivery guarantees
+- [Event reference](/webhooks/event-reference) — full payload schemas

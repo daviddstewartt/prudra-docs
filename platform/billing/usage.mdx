@@ -1,0 +1,95 @@
+---
+title: "Usage"
+description: "Check current usage against your plan limits via the dashboard or API."
+---
+
+## Usage
+
+Monitor your current resource usage to stay within plan limits and decide when to upgrade.
+
+## Check usage via API
+
+```bash
+curl https://api.prudra.dev/billing/usage \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+{
+  "plan": "pro",
+  "period": {
+    "start": "2026-05-01T00:00:00.000Z",
+    "end":   "2026-06-01T00:00:00.000Z"
+  },
+  "payments": {
+    "used":  847,
+    "limit": 10000
+  },
+  "vaults": {
+    "active": {
+      "used":  12,
+      "limit": 50
+    },
+    "persisted": {
+      "used":  3,
+      "limit": 20
+    }
+  },
+  "storage": {
+    "bytes": {
+      "used":  1073741824,
+      "limit": 10737418240
+    }
+  },
+  "wallets": {
+    "managed": {
+      "used":  1,
+      "limit": 1
+    },
+    "byo": {
+      "used":  2,
+      "limit": 5
+    }
+  }
+}
+```
+
+A `limit` of `-1` means unlimited.
+
+## Check usage via SDK
+
+```typescript
+import { initialise } from '@prudra/core';
+import { getBillingUsage } from '@prudra/billing';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const usage = await getBillingUsage();
+
+const paymentsRemaining = usage.payments.limit === -1
+  ? 'unlimited'
+  : usage.payments.limit - usage.payments.used;
+
+console.log(`Payments remaining: ${paymentsRemaining}`);
+console.log(`Storage used: ${(usage.storage.bytes.used / 1e9).toFixed(2)} GB`);
+```
+
+## Payment count resets
+
+The `payments.used` counter resets at the start of each billing period. All other limits (wallets, vaults, storage) are concurrent/cumulative — they don't reset monthly.
+
+## When you approach limits
+
+Prudra does not send automatic warnings when you approach limits. Set up monitoring against the usage API, or watch for quota error responses in your logs:
+
+- `payment-limit-exceeded` — monthly payment cap reached
+- `vault-quota-exceeded` — active vault limit reached
+- `storage-quota-exceeded` — total storage limit reached
+
+## Related
+
+- [Plans](/platform/billing/plans) — limits by plan
+- [Vault quota](/storage/vaults/quota) — vault-specific quota details
+- [Billing overview](/platform/billing/overview) — billing concepts

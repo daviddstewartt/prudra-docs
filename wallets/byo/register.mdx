@@ -1,0 +1,125 @@
+---
+title: "Register a BYO wallet"
+description: "Register an existing EVM wallet address for Prudra monitoring — no private key required."
+---
+
+## Register a BYO wallet
+
+Registering a BYO wallet tells Prudra to monitor an existing EVM address for incoming deposits. You provide the address, chain, and which tokens to monitor. Prudra sets up address activity monitoring and returns a wallet object you can use in `walletMiddleware`.
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard support for BYO wallet registration is coming soon. Use the SDK or cURL to register wallets.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import { initialise, Chain, Token } from '@prudra/core';
+import { registerBYOWallet } from '@prudra/wallet';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const wallet = await registerBYOWallet({
+  address:         '0x742d35Cc...',
+  chain:           Chain.BASE,
+  supportedTokens: [Token.USDC],
+  name:            'Operations wallet',
+});
+
+console.log(wallet.id);      // byw_clx1abc123
+console.log(wallet.status);  // 'pending' → 'active' after AML screening
+console.log(wallet.address); // '0x742d35Cc...'
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X POST https://api.prudra.dev/wallet-infra/byo-wallets \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "address": "0x742d35Cc...",
+    "chain": "base",
+    "supportedTokens": ["USDC"],
+    "name": "Operations wallet"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id":              "byw_clx1abc123",
+  "address":         "0x742d35Cc...",
+  "chain":           "base",
+  "chainId":         8453,
+  "supportedTokens": ["USDC"],
+  "name":            "Operations wallet",
+  "status":          "pending",
+  "createdAt":       "2026-04-30T09:00:00.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `address` | string | Yes | The EVM wallet address to monitor (checksummed or lowercase) |
+| `chain` | Chain | Yes | The chain this address lives on |
+| `supportedTokens` | Token[] | Yes | Tokens to monitor for incoming deposits |
+| `name` | string | No | Human-readable label for this wallet |
+
+## Registration status
+
+After registration, the wallet status is `"pending"` while AML screening runs. Status values:
+
+| Status | Meaning |
+|---|---|
+| `pending` | AML screening in progress. Monitoring not yet active. |
+| `active` | Screening passed. Address is being monitored for deposits. |
+| `rejected` | Address flagged during AML screening. Cannot be used. |
+
+Check the status by fetching the wallet:
+
+```bash
+curl https://api.prudra.dev/wallet-infra/byo-wallets/byw_clx1abc123 \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+## What happens after registration
+
+1. AML screening completes (typically within seconds)
+2. If passed, Prudra registers the address with its blockchain monitoring service
+3. The wallet status changes to `active`
+4. Any incoming transfers to the address are detected and a `deposit.success` webhook fires
+5. A `WalletTransaction` record is created for each deposit
+
+## Use the wallet in payMiddleware
+
+Once `status === 'active'`, use the wallet ID in `walletMiddleware`:
+
+```typescript
+app.use(walletMiddleware({ walletId: 'byw_clx1abc123' }));
+```
+
+Payments made to your Prudra-protected endpoints will settle to this wallet address.
+
+## Error handling
+
+| Error | Status | Cause | Resolution |
+|---|---|---|---|
+| `byo-wallet-limit-reached` | 429 | Plan limit exceeded | Upgrade plan or deregister an existing wallet |
+| `wallet-already-registered` | 409 | Address already registered | Check your existing wallets with GET /wallet-infra/byo-wallets |
+| `address-format-invalid` | 422 | Not a valid EVM address | Use a checksummed or lowercase EVM address |
+
+## Next steps
+
+- [Monitor deposits](/wallets/byo/monitor-deposits) — how deposit detection and `deposit.success` work
+- [Supported chains and tokens](/wallets/byo/chains-tokens) — which chains and tokens are available
+- [Accept a payment](/payments/accept-a-payment) — use this wallet in the payment middleware chain

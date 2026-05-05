@@ -1,0 +1,122 @@
+---
+title: "How challenges are built"
+description: "The atomic dual-challenge generation — how both x402 and MPP challenges are built in a single call."
+---
+
+## How challenges are built
+
+When `payMiddleware` determines a request has no valid payment, it calls the Prudra API to generate a dual challenge. Both the x402 and MPP challenges are built atomically in a single `buildDualChallenge()` call. Neither header is written until both are ready.
+
+## The challenge generation call
+
+`payMiddleware` calls `POST /challenges` with:
+
+```json
+{
+  "walletId": "byw_abc123",
+  "hostname": "your-api.com",
+  "price": "0.01",
+  "currency": "USD",
+  "intent": "charge",
+  "acceptX402": true,
+  "acceptMPP": true,
+  "ip": "203.0.113.42"
+}
+```
+
+The `ip` field is used for rate limiting (20 challenges per IP per 60 seconds).
+
+## The x402 challenge
+
+The `PAYMENT-REQUIRED` header value is a base64-encoded JSON array of payment options:
+
+```json
+[
+  {
+    "scheme": "exact",
+    "network": "base-mainnet",
+    "maxAmountRequired": "10000",
+    "resource": "https://your-api.com/analyse",
+    "description": "Document analysis",
+    "mimeType": "application/json",
+    "payTo": "0x742d35Cc...",
+    "maxTimeoutSeconds": 300,
+    "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "extra": {
+      "name": "USDC",
+      "version": "2"
+    }
+  }
+]
+```
+
+The `payTo` address is the server's registered wallet address. The `asset` is the USDC contract address on Base. `maxAmountRequired` is the price converted to token base units (6 decimals for USDC).
+
+## The MPP challenge
+
+The `WWW-Authenticate` header uses the standard HTTP `Payment` scheme:
+
+```
+WWW-Authenticate: Payment
+  id="ch_abc123",
+  realm="your-api.com",
+  method="tempo",
+  intent="charge",
+  request="eyJhbW91bnQiOiIxMDAwMCIsInJlY2lwaWVudCI6IjB4NzQyZDM1Q2MuLi4iLCJjaGFpbklkIjo0MjE3fQ=="
+```
+
+The `id` field is the HMAC-SHA256 challenge ID:
+
+```
+input = [realm, method, intent, request, expires].join('|')
+id    = base64url(HMAC-SHA256(MPP_CHALLENGE_SECRET, input))
+```
+
+Verification is stateless — Prudra recomputes the HMAC from the echoed parameters and compares with `crypto.timingSafeEqual()`. No database lookup. No stored challenge state.
+
+The `request` field is a base64url-encoded JSON object:
+
+```json
+{
+  "amount": "10000",
+  "recipient": "0x742d35Cc...",
+  "chainId": 4217,
+  "token": "USDC.e"
+}
+```
+
+## Atomicity
+
+Both challenges reference the same wallet address and the same price. They're built in sequence within the same function, not in separate HTTP calls. This eliminates:
+
+- **Clock skew** — both challenges have the same expiry base time
+- **Race conditions** — a 402 response never has one challenge without the other
+- **Early flush bugs** — headers are accumulated before `res.writeHead()` is called
+
+## Rate limiting
+
+The challenge endpoint is rate-limited to 20 requests per IP per 60 seconds using a Redis sliding window. Requests that exceed this limit return:
+
+```json
+{
+  "type": "https://api.prudra.dev/problems/rate-limit-exceeded",
+  "title": "Too Many Requests",
+  "status": 429,
+  "detail": "Challenge rate limit exceeded. Wait 60 seconds."
+}
+```
+
+The rate limit applies to challenge generation, not to payment verification. A verified payment is never rate-limited.
+
+See [Prevent challenge harvesting](/payments/security/harvesting) for why this rate limit exists.
+
+## Secrets never leave the server
+
+The `MPP_CHALLENGE_SECRET` used to compute the HMAC is a server-side environment variable. It's never sent to agents, never included in response headers, and never logged. The HMAC design means the secret is never needed on the client side — only Prudra's server needs it to generate and verify challenges.
+
+## Related
+
+- [Choose between x402 and MPP](/payments/dual-protocol/pick-protocol) — when to use each protocol
+- [Dual-protocol overview](/payments/dual-protocol/overview) — the full dual-protocol design
+- [Prevent challenge harvesting](/payments/security/harvesting) — rate limiting and no-challenge-on-error
+- [Replay attack protection](/payments/security/replay) — how txHash uniqueness prevents replay

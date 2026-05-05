@@ -1,0 +1,168 @@
+---
+title: "Test x402 payments"
+description: "Run the x402 agent test script to verify your endpoint accepts x402 payments end-to-end."
+---
+
+## Test x402 payments
+
+The x402 test script walks through the complete payment flow from the agent's perspective: request without payment, receive 402, decode the challenge, sign an ERC-3009 authorization, and resubmit with the signature.
+
+## PAYMENT_STUB_MODE
+
+During development, set `PAYMENT_STUB_MODE=true` on your server. In stub mode, the server accepts any payment credential without verifying it on-chain. This lets you test the full HTTP flow without a funded wallet or a real blockchain connection.
+
+```bash
+PAYMENT_STUB_MODE=true PRUDRA_API_KEY=prv_test_sk_... npx ts-node server.ts
+```
+
+<Warning>
+  Set `PAYMENT_STUB_MODE=false` in production. Stub mode accepts any credential — it bypasses all payment verification.
+</Warning>
+
+## The test script (example-06)
+
+This is the full x402 agent from `example-06-x402-agent.ts`. Run it against your server to verify the integration end-to-end:
+
+```typescript
+import { ethers } from 'ethers';
+import {
+  signX402Payment,
+  decodePaymentRequirements,
+  selectPaymentOption,
+} from '@prudra/payments';
+
+const SERVER_URL = 'http://localhost:4001';
+
+async function runX402Agent() {
+  // Any private key works in stub mode — no real USDC needed
+  const agentWallet = new ethers.Wallet(process.env.AGENT_PRIVATE_KEY!);
+  console.log('Agent wallet:', agentWallet.address);
+
+  // Step 1: Request without payment — expect 402
+  console.log('\nStep 1: Request endpoint without payment');
+  const r1 = await fetch(`${SERVER_URL}/summarise`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'Summarise this for me please' }),
+  });
+
+  console.log('Status:', r1.status); // expected: 402
+
+  const x402Header = r1.headers.get('payment-required');
+  const mppHeader  = r1.headers.get('www-authenticate');
+  console.log('x402 header present:', !!x402Header);
+  console.log('MPP header present:', !!mppHeader);
+
+  // Step 2: Decode payment requirements
+  console.log('\nStep 2: Decode PAYMENT-REQUIRED');
+  const requirements = decodePaymentRequirements(x402Header!);
+  const option = selectPaymentOption(requirements, 'USDC');
+
+  console.log('Network:', option.network);
+  console.log('Amount:', option.maxAmountRequired, 'base units');
+  console.log('Pay to:', option.payTo);
+
+  // Step 3: Sign ERC-3009 authorization (off-chain — no gas cost)
+  console.log('\nStep 3: Sign ERC-3009 authorization');
+  const { xPaymentHeader, validBefore, from } = await signX402Payment(
+    agentWallet,
+    option,
+  );
+  console.log('Signed by:', from);
+  console.log('Valid until:', new Date(validBefore * 1000).toISOString());
+
+  // Step 4: Resubmit with payment signature
+  console.log('\nStep 4: Resubmit with PAYMENT-SIGNATURE');
+  const r2 = await fetch(`${SERVER_URL}/summarise`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'PAYMENT-SIGNATURE': xPaymentHeader,
+    },
+    body: JSON.stringify({ text: 'Summarise this for me please' }),
+  });
+
+  console.log('Status:', r2.status); // expected: 200
+
+  // Step 5: Read the result and settlement details
+  const result = await r2.json();
+  console.log('\nResult:', JSON.stringify(result, null, 2));
+
+  const paymentResponse = r2.headers.get('payment-response');
+  if (paymentResponse) {
+    const settlement = JSON.parse(Buffer.from(paymentResponse, 'base64').toString());
+    console.log('\nSettlement (PAYMENT-RESPONSE header):', JSON.stringify(settlement, null, 2));
+  }
+
+  console.log('\nVault ID:', result.vaultId);
+  console.log('Protocol:', result.payment?.protocol); // 'x402'
+}
+
+runX402Agent().catch(err => {
+  console.error('Fatal:', err.message);
+  process.exit(1);
+});
+```
+
+## Run the test
+
+```bash
+# Install dependencies
+npm install ethers @prudra/payments
+
+# Run with a test private key (any key works in stub mode)
+AGENT_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
+  npx ts-node example-06-x402-agent.ts
+```
+
+**Expected output:**
+
+```
+Agent wallet: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+
+Step 1: Request endpoint without payment
+Status: 402
+x402 header present: true
+MPP header present: true
+
+Step 2: Decode PAYMENT-REQUIRED
+Network: base-mainnet
+Amount: 10000 base units
+Pay to: 0x742d35Cc...
+
+Step 3: Sign ERC-3009 authorization
+Signed by: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+Valid until: 2026-04-30T09:05:00.000Z
+
+Step 4: Resubmit with PAYMENT-SIGNATURE
+Status: 200
+
+Result: {
+  "vaultId": "vlt_clx1abc123",
+  "summary": "Summary of \"Summarise this for me please...\"",
+  "payment": { "protocol": "x402", "txHash": "0xabc..." }
+}
+
+Settlement (PAYMENT-RESPONSE header): {
+  "txHash": "0xabc...",
+  "settlementPending": false,
+  "network": "base-mainnet"
+}
+
+Vault ID: vlt_clx1abc123
+Protocol: x402
+```
+
+## Testing with real funds
+
+To test with real USDC on Base (mainnet):
+
+1. Set `PAYMENT_STUB_MODE=false` on your server
+2. Fund the agent wallet with USDC on Base
+3. Run the same script — the `signX402Payment` function works identically; the difference is the server submits the authorization to Base mainnet
+
+## Related
+
+- [How x402 works](/payments/x402/how-it-works) — what `signX402Payment` does internally
+- [Handle the payment response](/payments/x402/handle-response) — decode the `PAYMENT-RESPONSE` header
+- [Add x402 to an endpoint](/payments/x402/add-to-endpoint) — configure your server

@@ -1,0 +1,95 @@
+---
+title: "Query routes"
+description: "Discover payment-protected routes programmatically from an agent or client."
+---
+
+## Query routes
+
+AI agents can query the route registry to discover what endpoints are available, what they cost, and which payment protocols they support — before making any requests.
+
+## Query all routes for an organisation
+
+```bash
+curl "https://api.prudra.dev/registry?orgId=org_clx1abc123" \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+[
+  {
+    "route":       "/api/generate",
+    "method":      "POST",
+    "price":       "0.10",
+    "token":       "USDC",
+    "chain":       "base",
+    "protocols":   ["x402", "mpp"],
+    "description": "Generate a report from uploaded data",
+    "snapshotAt":  "2026-04-30T09:00:00.000Z"
+  },
+  {
+    "route":       "/api/analyse",
+    "method":      "POST",
+    "price":       "0.05",
+    "token":       "USDC",
+    "chain":       "base",
+    "protocols":   ["x402"],
+    "description": "Analyse a CSV file",
+    "snapshotAt":  "2026-04-30T08:00:00.000Z"
+  }
+]
+```
+
+## Query a specific route
+
+```bash
+curl "https://api.prudra.dev/registry?orgId=org_clx1abc123&route=/api/generate&method=POST" \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+## From an AI agent (TypeScript)
+
+```typescript
+async function discoverRoutes(orgId: string) {
+  const response = await fetch(
+    `https://api.prudra.dev/registry?orgId=${orgId}`,
+    { headers: { Authorization: `Bearer ${process.env.PRUDRA_API_KEY}` } }
+  );
+
+  const routes = await response.json();
+
+  for (const route of routes) {
+    console.log(`${route.method} ${route.route}`);
+    console.log(`  Price: ${route.price} ${route.token} on ${route.chain}`);
+    console.log(`  Protocols: ${route.protocols.join(', ')}`);
+    console.log(`  ${route.description}`);
+  }
+}
+```
+
+## Agent-driven payment selection
+
+Agents can use registry data to select the cheapest or most compatible route:
+
+```typescript
+const routes = await fetchRegistry(orgId);
+
+// Find a route that supports MPP (for Tempo/USDC.e)
+const mppRoute = routes.find(r => r.protocols.includes('mpp'));
+
+// Find the cheapest route
+const cheapest = routes.sort((a, b) =>
+  parseFloat(a.price) - parseFloat(b.price)
+)[0];
+
+// Check if we can afford to call a route
+const balance = await getBalance();
+const canAfford = routes.filter(r => parseFloat(r.price) <= balance);
+```
+
+## Related
+
+- [Route snapshot](/discovery/registry/route-snapshot) — snapshot format
+- [Pricing signals](/discovery/registry/pricing-signals) — how agents use pricing data
+- [Discovery overview](/discovery/overview) — registry concepts

@@ -1,0 +1,106 @@
+---
+title: "Event reference"
+description: "System event payloads and custom event format for vault SSE streams."
+---
+
+## Event reference
+
+Every event on the vault SSE stream shares a common envelope. Some events are fired by Prudra automatically (system events); others are fired by your server via `vault.emit()`.
+
+## Event envelope
+
+```json
+{
+  "type":      "job.progress",
+  "eventId":   "evt_clx1abc123",
+  "vaultId":   "vlt_clx1abc123",
+  "timestamp": "2026-04-30T09:01:00.000Z",
+  "payload":   { "current": 5, "total": 10 }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | string | Event type — system or custom |
+| `eventId` | string | Unique event ID |
+| `vaultId` | string | Vault this event belongs to |
+| `timestamp` | string | ISO timestamp |
+| `payload` | object | Event-specific data |
+
+## System events
+
+### `vault.sealed`
+
+Fired when the vault is sealed. The SSE stream closes after this event.
+
+```json
+{
+  "type":    "vault.sealed",
+  "payload": {
+    "vaultId":  "vlt_clx1abc123",
+    "summary":  "Processed 47 items",
+    "sealedAt": "2026-04-30T09:05:00.000Z"
+  }
+}
+```
+
+### `vault.expiring`
+
+Fired 1 hour before the vault TTL expires.
+
+```json
+{
+  "type":    "vault.expiring",
+  "payload": {
+    "vaultId":   "vlt_clx1abc123",
+    "expiresAt": "2026-05-01T09:00:00.000Z"
+  }
+}
+```
+
+### `vault.expired`
+
+Fired when the vault TTL elapses and the vault is deleted.
+
+```json
+{
+  "type":    "vault.expired",
+  "payload": {
+    "vaultId":   "vlt_clx1abc123",
+    "expiredAt": "2026-05-01T09:00:00.000Z"
+  }
+}
+```
+
+## Custom events
+
+Your server can emit any event type with any payload. Convention is to use dot-notation strings:
+
+```json
+{
+  "type":    "job.progress",
+  "payload": {
+    "current": 5,
+    "total":   10,
+    "percent": 50,
+    "item":    "invoice_042.pdf"
+  }
+}
+```
+
+```json
+{
+  "type":    "item.error",
+  "payload": {
+    "item":    "corrupt_file.pdf",
+    "reason":  "parse-error",
+    "skipped": true
+  }
+}
+```
+
+## Related
+
+- [Emit events](/storage/events/emit) — server-side emission
+- [Subscribe via SSE](/storage/events/subscribe-sse) — client-side subscription
+- [Webhooks event reference](/webhooks/event-reference) — `vault.sealed` and `vault.expiring` as webhook events

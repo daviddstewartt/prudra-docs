@@ -1,0 +1,84 @@
+---
+title: "Choose a wallet type"
+description: "Decide between managed wallets and BYO wallets based on your custody needs and use case."
+---
+
+## Choose a wallet type
+
+Prudra supports two wallet types: managed and BYO. The right choice depends on whether you need Prudra to initiate transactions on your behalf, and whether you already have an existing wallet address.
+
+## Decision table
+
+| If you need... | Use |
+|---|---|
+| Receive payments only, have existing wallet | BYO wallet |
+| No custody complexity, quick setup | BYO wallet |
+| Send transfers or withdrawals | Managed wallet |
+| Bridge tokens across chains | Managed wallet |
+| Per-customer unique deposit addresses | Managed wallet (child addresses) |
+| Automated fund sweeping | Managed wallet |
+| Maximum custody control | BYO wallet |
+| Phase 1 / simplest path | BYO wallet |
+
+## BYO wallet
+
+You own and control the private key. Prudra monitors your address using blockchain address monitoring — it fires `deposit.success` webhooks when funds arrive and maintains a balance view, but it never initiates transactions.
+
+**Pros:**
+- No custody relationship with Prudra
+- Works with any existing EVM wallet
+- Fast setup (register an address, done)
+- No key management to think about
+
+**Cons:**
+- No outbound transfers from Prudra
+- No bank withdrawals via Prudra
+- No child address generation
+- Manual fund management required
+
+**Plan limits:**
+- Hobby: 1 BYO wallet
+- Pro: 5 BYO wallets
+- Enterprise: unlimited BYO wallets
+
+## Managed wallet
+
+Prudra generates a private key and custodies it using KMS envelope encryption. The key never exists in plaintext outside hardware. You get an address; Prudra can initiate transactions from that address on your behalf.
+
+**Pros:**
+- Outbound transfers, swaps, and bridges
+- Bank withdrawals (crypto → fiat → wire)
+- Child addresses for per-customer isolation
+- No key infrastructure to manage
+
+**Cons:**
+- Prudra holds custody of the key
+- One master wallet per plan (Hobby/Pro)
+- Requires trust in Prudra's key management
+
+**Plan limits:**
+- Hobby: 1 managed wallet, 1 active chain
+- Pro: 1 managed wallet, 5 active chains
+- Enterprise: unlimited managed wallets and chains
+
+## Child addresses
+
+Child addresses are unique EVM addresses derived from a managed master wallet using BIP-44 hierarchical deterministic derivation. Each child address is independent and receives funds separately.
+
+Use cases for child addresses:
+- Issue a unique deposit address to each customer
+- Separate payment flows by product line or geography
+- Limit blast radius if one address is compromised
+
+Child addresses are unlimited on all plans. They require a managed wallet.
+
+## When to use both
+
+Some organisations use both: a BYO wallet for payment receipt on existing infrastructure, and a managed wallet for treasury operations (outbound transfers, withdrawals). The `walletMiddleware` can be configured per-route to use different wallets.
+
+## Related
+
+- [Managed wallets overview](/wallets/managed/overview) — KMS encryption, how custody works
+- [BYO wallets overview](/wallets/byo/overview) — monitoring, registration, deposit detection
+- [Child addresses](/wallets/managed/child-addresses) — per-customer unique deposit addresses
+- [Transfers](/wallets/transfers/overview) — what managed wallets can do with funds

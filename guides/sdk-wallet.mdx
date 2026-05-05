@@ -1,0 +1,71 @@
+---
+title: Wallet SDK
+description: "@prudra/wallet — Tempo wallets, managed wallet infrastructure, transfers, and withdrawals."
+---
+
+## Overview
+
+The `@prudra/wallet` package wraps Prudra HTTP APIs for both the **legacy Tempo custodial wallet** (`/wallets`) and **managed infrastructure** (`/wallet-infra/*`). Initialise `@prudra/core` once with your API key; all helpers reuse that configuration.
+
+## Setup
+
+```typescript
+import { Chain, Token, initialise } from '@prudra/core';
+import {
+  provisionManagedWallet,
+  transferManagedTokens,
+  withdrawManagedFunds,
+  registerBankAccount,
+} from '@prudra/wallet';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+```
+
+## Constants (`@prudra/core`)
+
+`Chain` and `Token` provide autocomplete-friendly slugs and symbols shared with the server.
+
+## Legacy Tempo wallet API
+
+| Function | Route |
+| --- | --- |
+| `getWallet`, `provisionWallet` | `/wallets/me`, `POST /wallets` |
+| `getBalance`, `getHistory` | balance + history |
+| `withdraw` | withdrawal stub / future implementation |
+
+Use these for USDC-on-Tempo style flows that pre-date multi-chain masters.
+
+## Managed infrastructure
+
+| Function | Purpose |
+| --- | --- |
+| `provisionManagedWallet` | `POST /wallet-infra/master-wallets` |
+| `listManagedWallets`, `getManagedMasterWallet` | List/get masters |
+| `deriveManagedChildAddress`, `listManagedChildAddresses` | HD children |
+| `getManagedWalletBalances`, `getManagedWalletTransactions` | Balances + tx feed |
+| `transferManagedTokens` | `POST /wallet-infra/transfer` |
+| `registerBankAccount`, `listBankAccounts`, `deleteBankAccount` | Fiat metadata |
+| `withdrawManagedFunds`, `listManagedWithdrawals`, `getManagedWithdrawal` | Withdrawals |
+
+## Transfer helper
+
+Managed sends intentionally use the name `transferManagedTokens` to avoid clashing with Tempo `withdraw` helpers:
+
+```typescript
+const out = await transferManagedTokens({
+  fromWalletId: 'mwt_xxx',
+  fromWalletType: 'master',
+  fromChain: Chain.BASE,
+  fromToken: Token.USDC,
+  toAddress: '0x...',
+  toChain: Chain.BASE,
+  toToken: Token.USDC,
+  amount: '25.00',
+});
+```
+
+## Related documentation
+
+- [Managed wallets concept](/concepts/managed-wallets)
+- [Token transfers](/concepts/token-transfers)
+- [Withdrawals guide](/guides/withdrawing-funds)

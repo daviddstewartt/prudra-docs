@@ -1,0 +1,108 @@
+---
+title: "How x402 works"
+description: "The ERC-3009 signing flow, settlement mechanics, and what Prudra does on behalf of the server."
+---
+
+## How x402 works
+
+x402 uses ERC-3009 `transferWithAuthorization` — an EIP that lets a wallet owner sign a token transfer authorization off-chain. The signature authorizes moving tokens from the signer's wallet, but the transaction is submitted by a third party (in this case, Prudra's settlement service). The agent signs; Prudra moves the funds.
+
+## The ERC-3009 authorization
+
+An ERC-3009 `transferWithAuthorization` contains these fields, all signed together:
+
+| Field | Value |
+|---|---|
+| `from` | Agent's wallet address |
+| `to` | Server's receiving wallet address (from the payment option) |
+| `value` | Token amount in base units |
+| `validAfter` | Unix timestamp — signature not valid before this time |
+| `validBefore` | Unix timestamp — signature expires at this time (typically now + 5 minutes) |
+| `nonce` | Random 32-byte value — prevents replay |
+
+The agent signs this data with their private key using EIP-712 typed data signing. The result is a 65-byte signature (`v`, `r`, `s`). Prudra encodes the signature plus all authorization fields as a base64 string and puts it in the `PAYMENT-SIGNATURE` header.
+
+## The full flow
+
+```mermaid
+sequenceDiagram
+    participant A as Agent wallet
+    participant S as Your API (payMiddleware)
+    participant P as Prudra verify endpoint
+    participant CDP as Settlement service
+    participant BC as Base (USDC contract)
+
+    Note over A,S: Step 1 — Get the challenge
+    A->>S: POST /endpoint (no payment header)
+    S->>P: POST /challenges (walletId, price, hostname)
+    P-->>S: x402 options + MPP challenge
+    S-->>A: 402 + PAYMENT-REQUIRED: base64(options[])
+
+    Note over A: Step 2 — Sign off-chain
+    A->>A: Decode PAYMENT-REQUIRED
+    A->>A: Select USDC option on base-mainnet
+    A->>A: Generate random nonce
+    A->>A: Sign ERC-3009 with private key (no transaction)
+    A->>A: Encode as base64 → PAYMENT-SIGNATURE
+
+    Note over A,S: Step 3 — Pay and resubmit
+    A->>S: POST /endpoint + PAYMENT-SIGNATURE: base64(credential)
+    S->>P: POST /payments/verify (credential, price, walletId)
+    P->>P: Decode credential
+    P->>P: Verify EIP-712 signature (ecrecover)
+    P->>P: Check validBefore not expired
+    P->>P: Check nonce not used (UNIQUE constraint)
+    P-->>S: 200 + paymentId + settlementToken
+
+    Note over S: Step 4 — Do the work
+    S->>S: Create vault, run handler
+    S-->>A: 200 + result + vaultId + PAYMENT-RESPONSE header
+
+    Note over P,BC: Step 5 — Settle on-chain (async)
+    P->>CDP: Submit ERC-3009 authorization
+    CDP->>BC: transferWithAuthorization(from, to, value, ...)
+    BC-->>CDP: Transaction confirmed
+    CDP-->>P: txHash
+```
+
+## What Prudra verifies
+
+When `payMiddleware` receives a `PAYMENT-SIGNATURE` header, it calls `POST /payments/verify` which performs these checks:
+
+1. **Decode** — base64-decode the credential, parse the JSON
+2. **Signature verification** — ecrecover the signer address from the EIP-712 signed data. Must match the `from` field.
+3. **Expiry** — `validBefore` must be in the future. The credential is valid for ~5 minutes after signing.
+4. **Nonce uniqueness** — the nonce is checked against a UNIQUE constraint in Postgres. The same nonce cannot be used twice, even if the signature itself is valid.
+5. **Amount** — the signed `value` must be at least the required price converted to token base units.
+6. **Recipient** — the `to` address must match the server's registered wallet address.
+
+If all checks pass, the payment is recorded and a `settlementToken` is returned. Settlement (the actual on-chain transaction) happens asynchronously.
+
+## The PAYMENT-RESPONSE header
+
+On a successful 200 response, Prudra adds a `PAYMENT-RESPONSE` header containing a base64-encoded JSON object:
+
+```json
+{
+  "txHash": "0xabc123...",
+  "settlementPending": false,
+  "network": "base-mainnet",
+  "paidAt": "2026-04-30T09:00:00.000Z"
+}
+```
+
+If `settlementPending` is `true`, the on-chain transaction hasn't been submitted yet. The agent can poll or use a webhook to confirm settlement. In practice, settlement happens within seconds.
+
+## Replay protection
+
+The nonce field in the ERC-3009 signature is enforced at the Postgres level with a UNIQUE constraint on the `nonce` column in the Payment table. Application-level uniqueness checks have race conditions — two concurrent requests with the same signature can both pass before either DB write commits. The database constraint closes this window atomically.
+
+See [Replay attack protection](/payments/security/replay) for details.
+
+## Related
+
+- [Add x402 to an endpoint](/payments/x402/add-to-endpoint) — configure payMiddleware options
+- [Test x402 payments](/payments/x402/test) — the full test script from example-06
+- [Handle the payment response](/payments/x402/handle-response) — decode PAYMENT-RESPONSE
+- [Replay attack protection](/payments/security/replay) — how nonce uniqueness prevents replay
+- [Dual-protocol payments](/payments/dual-protocol/challenge) — how challenges are built atomically

@@ -1,0 +1,60 @@
+---
+title: "Billing overview"
+description: "How Prudra billing works — plan tiers, usage tracking, and upgrades."
+---
+
+## Billing overview
+
+Prudra billing is plan-based. Your plan determines feature access and resource limits. Usage is tracked in real time and visible via the dashboard and API.
+
+## Plans
+
+| Feature | Hobby | Pro | Enterprise |
+|---|---|---|---|
+| Payments / month | 100 | 10,000 | Unlimited |
+| Session payments | — | ✓ | ✓ |
+| Managed wallets | 1 | 1 | Unlimited |
+| Active chains | 1 | 5 | Unlimited |
+| BYO wallets | 1 | 5 | Unlimited |
+| Child addresses | Unlimited | Unlimited | Unlimited |
+| Auto-sweep | — | ✓ | ✓ |
+| Gasless transfers | — | ✓ | ✓ |
+| Treasury yield | — | ✓ | ✓ |
+| Active vaults | 3 | 50 | Unlimited |
+| Persisted vaults | 1 | 20 | Unlimited |
+| Vault TTL | 24h | 7 days | Unlimited |
+| Documents per vault | 50 | Unlimited | Unlimited |
+| Files per vault | 5 | 100 | Unlimited |
+| Max file size | 10 MB | 100 MB | 1 GB |
+| Total storage | 500 MB | 10 GB | Unlimited |
+| Webhooks | — | ✓ | ✓ |
+
+## Usage and limits
+
+Usage counters reset monthly for payment counts. Wallet, vault, and storage limits are concurrent/cumulative, not monthly.
+
+When a limit is reached:
+- Payment limits: requests return `402 Payment Required` (meta-limit exceeded)
+- Vault limits: `vault-quota-exceeded` (429)
+- Storage limits: `storage-quota-exceeded` (429)
+- Wallet limits: `managed-wallet-limit-reached` (429) or `byo-wallet-limit-reached` (429)
+
+## Getting started
+
+The **Hobby plan** is free and gives you everything you need to build and test in development. Upgrade to **Pro** when you need session payments, webhooks, higher vault limits, or more than 100 payments per month.
+
+## Sub-pages
+
+<CardGroup cols={2}>
+  <Card title="Plans" icon="list" href="/platform/billing/plans">
+    Detailed plan comparison and upgrade instructions.
+  </Card>
+  <Card title="Usage" icon="chart-bar" href="/platform/billing/usage">
+    Check current usage against plan limits.
+  </Card>
+</CardGroup>
+
+## Related
+
+- [Organisations](/platform/organisations/overview) — manage your organisation
+- [API keys](/platform/organisations/api-keys) — create and revoke API keys

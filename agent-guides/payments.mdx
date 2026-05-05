@@ -1,0 +1,155 @@
+---
+title: "Agent payments"
+description: "Full x402 and MPP agent payment implementations with retry logic and error handling."
+---
+
+## Agent payments
+
+## x402 payment flow
+
+The x402 protocol uses ERC-3009 off-chain signatures. The agent signs but never sends an on-chain transaction — the Prudra server handles settlement.
+
+```typescript
+import { ethers } from 'ethers';
+import {
+  signX402Payment,
+  decodePaymentRequirements,
+  selectPaymentOption,
+} from '@prudra/payments';
+
+async function callWithX402(
+  url:    string,
+  body:   unknown,
+  wallet: ethers.Wallet,
+) {
+  // Attempt 1: no payment
+  const r1 = await fetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  });
+
+  if (r1.status !== 402) return r1;  // not a payment-gated endpoint
+
+  // Decode challenge
+  const requirements = decodePaymentRequirements(r1.headers.get('payment-required')!);
+  const option = selectPaymentOption(requirements, 'USDC');
+
+  // Sign off-chain (no gas, no tx)
+  const { xPaymentHeader } = await signX402Payment(wallet, option);
+
+  // Attempt 2: with signature
+  return fetch(url, {
+    method:  'POST',
+    headers: {
+      'Content-Type':      'application/json',
+      'PAYMENT-SIGNATURE': xPaymentHeader,
+    },
+    body: JSON.stringify(body),
+  });
+}
+```
+
+## MPP payment flow
+
+MPP requires an actual on-chain transaction. The agent sends USDC.e to the recipient address on Tempo, then submits the txHash as proof.
+
+```typescript
+import { ethers } from 'ethers';
+
+const ERC20_ABI = [
+  'function transfer(address to, uint256 amount) returns (bool)',
+];
+
+async function callWithMPP(
+  url:      string,
+  body:     unknown,
+  signer:   ethers.Wallet,
+) {
+  // Attempt 1: no payment
+  const r1 = await fetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  });
+
+  if (r1.status !== 402) return r1;
+
+  const wwwAuth = r1.headers.get('www-authenticate')!;
+
+  // Parse challenge fields
+  const field = (name: string) =>
+    wwwAuth.match(new RegExp(`${name}="([^"]+)"`))?.[1];
+
+  const challengeId = field('id')!;
+  const request     = Buffer.from(field('request')!, 'base64url').toString();
+  const requestObj  = JSON.parse(request);
+  const expires     = field('expires')!;
+  const realm       = field('realm');
+  const intent      = field('intent');
+  const method      = field('method');
+
+  if (new Date() > new Date(expires)) {
+    throw new Error('Challenge expired');
+  }
+
+  // Send on-chain payment
+  const token = new ethers.Contract(requestObj.currency, ERC20_ABI, signer);
+  const tx = await token.transfer(requestObj.recipient, BigInt(requestObj.amount));
+  const receipt = await tx.wait(1);
+
+  // Build credential
+  const credential = Buffer.from(JSON.stringify({
+    txHash:    receipt.hash,
+    protocol:  'mpp',
+    challengeId, intent, method, realm,
+    request:   field('request'),
+    expires,
+  })).toString('base64url');
+
+  // Attempt 2: with payment proof
+  return fetch(url, {
+    method:  'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Payment ${credential}`,
+    },
+    body: JSON.stringify(body),
+  });
+}
+```
+
+## Session reuse (MPP only)
+
+When a session payment was used on the first request, the response includes `X-PRUDRA-SESSION-ID`. Reuse it to avoid paying again:
+
+```typescript
+let sessionId: string | null = null;
+
+async function callWithSession(url: string, body: unknown, signer: ethers.Wallet) {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (sessionId) {
+    headers['X-PRUDRA-SESSION-ID'] = sessionId;
+  }
+
+  const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+
+  if (r.status === 402 || !sessionId) {
+    // Need to pay — use MPP flow
+    const paid = await callWithMPP(url, body, signer);
+    sessionId = paid.headers.get('x-prudra-session-id');
+    return paid;
+  }
+
+  return r;
+}
+```
+
+## Related
+
+- [x402 — how it works](/payments/x402/how-it-works) — ERC-3009 flow in detail
+- [MPP — authorization](/payments/mpp/authorization) — MPP credential format
+- [Session payments](/payments/sessions/overview) — session reuse

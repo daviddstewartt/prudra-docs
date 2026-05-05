@@ -1,0 +1,105 @@
+---
+title: "Subscribe via SSE"
+description: "Subscribe to the vault event stream using Server-Sent Events from a browser, CLI, or agent."
+---
+
+## Subscribe via SSE
+
+The vault event stream is a standard SSE endpoint. Any HTTP client that supports Server-Sent Events can subscribe: browsers, Node.js, Python, curl, or AI agents.
+
+## Authentication
+
+The SSE endpoint requires a Bearer token — either your API key or a vault access token:
+
+```bash
+# Using your API key (server-side only)
+curl -N -H "Authorization: Bearer prv_test_sk_..." \
+  "https://api.prudra.dev/vaults/vlt_clx1abc123/events"
+
+# Using a vault access token (safe for clients)
+curl -N -H "Authorization: Bearer vat_clx1abc123xyz" \
+  "https://api.prudra.dev/vaults/vlt_clx1abc123/events"
+```
+
+Use vault access tokens when subscribing from a browser or agent — do not expose your API key.
+
+## From a browser (JavaScript)
+
+```javascript
+const eventSource = new EventSource(
+  'https://api.prudra.dev/vaults/vlt_clx1abc123/events',
+  { headers: { Authorization: `Bearer ${accessToken}` } }
+);
+
+eventSource.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log(data.type, data.payload);
+
+  if (data.type === 'vault.sealed') {
+    eventSource.close();
+    displayResults();
+  }
+};
+
+eventSource.onerror = () => {
+  eventSource.close();
+};
+```
+
+## From Node.js
+
+```typescript
+import EventSource from 'eventsource';
+
+const es = new EventSource(
+  `https://api.prudra.dev/vaults/${vaultId}/events`,
+  { headers: { Authorization: `Bearer ${accessToken}` } }
+);
+
+es.onmessage = (event) => {
+  const data = JSON.parse(event.data) as { type: string; payload: unknown };
+  console.log(`[${data.type}]`, data.payload);
+
+  if (data.type === 'vault.sealed') {
+    es.close();
+  }
+};
+```
+
+## SSE event format
+
+Each event follows the standard SSE format:
+
+```
+data: {"type":"job.progress","payload":{"current":3,"total":10},"vaultId":"vlt_clx1abc123","timestamp":"2026-04-30T09:01:00.000Z"}
+
+data: {"type":"vault.sealed","payload":{"summary":"Done"},"vaultId":"vlt_clx1abc123","timestamp":"2026-04-30T09:05:00.000Z"}
+```
+
+## Replay missed events
+
+The SSE endpoint supports `Last-Event-ID` for replaying missed events from the last known position:
+
+```bash
+curl -N \
+  -H "Authorization: Bearer vat_..." \
+  -H "Last-Event-ID: evt_clx1abc100" \
+  "https://api.prudra.dev/vaults/vlt_clx1abc123/events"
+```
+
+Events are replayed from the specified event ID onward. This allows reconnecting after a dropped connection without missing events.
+
+## Stream termination
+
+The stream closes automatically when:
+- The vault is sealed (`vault.sealed` event fires, then connection closes)
+- The vault expires
+- The access token expires
+
+After the stream closes, re-subscribing to a sealed vault returns all historical events immediately followed by the `vault.sealed` event.
+
+## Related
+
+- [Emit events](/storage/events/emit) — server-side event emission
+- [Access control](/storage/vaults/access-control) — issue vault access tokens
+- [Event reference](/storage/events/event-reference) — event payload schemas

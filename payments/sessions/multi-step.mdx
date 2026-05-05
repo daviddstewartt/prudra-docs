@@ -1,0 +1,169 @@
+---
+title: "Handle multi-step workflows"
+description: "The two-request session pattern — pay once, run multiple steps, accumulate results in one vault."
+---
+
+## Handle multi-step workflows
+
+A multi-step session workflow follows this pattern: the agent pays once (first request), receives a session ID, then makes as many subsequent requests as needed — all sharing the same vault and accumulating results.
+
+## The two-request pattern
+
+**Step 1 — First request (pays, creates session):**
+
+```bash
+curl -i -X POST https://your-api.com/agent/step \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Payment eyJ..." \
+  -d '{"step": "search", "query": "quantum computing papers 2025"}'
+```
+
+Response:
+
+```
+HTTP/1.1 200 OK
+X-PRUDRA-SESSION-ID: sess_clx1abc123
+Content-Type: application/json
+
+{
+  "vaultId":   "vlt_clx1def456",
+  "sessionId": "sess_clx1abc123",
+  "step":      "search",
+  "result":    { "papers": ["paper1", "paper2", "paper3"] }
+}
+```
+
+The agent saves `vaultId` and `sessionId` for subsequent requests.
+
+**Step 2 — Subsequent request (no payment):**
+
+```bash
+curl -X POST https://your-api.com/agent/step \
+  -H "Content-Type: application/json" \
+  -H "X-PRUDRA-SESSION-ID: sess_clx1abc123" \
+  -d '{"step": "summarise", "query": "quantum computing papers 2025"}'
+```
+
+Response:
+
+```json
+{
+  "vaultId":   "vlt_clx1def456",
+  "sessionId": "sess_clx1abc123",
+  "step":      "summarise",
+  "result":    { "summary": "Found 3 papers on quantum computing..." }
+}
+```
+
+The `vaultId` is identical to Step 1 — the same vault. Both steps' documents are in it.
+
+## Confirming vault accumulation
+
+After all steps complete, verify that the vault contains all accumulated results:
+
+```bash
+curl https://api.prudra.dev/vaults/vlt_clx1def456 \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+{
+  "id":     "vlt_clx1def456",
+  "status": "active",
+  "documents": [
+    {
+      "id":      "doc_1",
+      "name":    "Step: search",
+      "addedAt": "2026-04-30T09:00:01.000Z"
+    },
+    {
+      "id":      "doc_2",
+      "name":    "Step: summarise",
+      "addedAt": "2026-04-30T09:00:05.000Z"
+    }
+  ],
+  "events": [
+    { "event": "agent.step", "payload": { "step": "search" } },
+    { "event": "agent.step", "payload": { "step": "summarise" } }
+  ]
+}
+```
+
+Both documents from both steps are present in the single vault.
+
+## Full TypeScript example
+
+```typescript
+// From example-04-session-payments.ts
+
+async function runMultiStepSession(serverUrl: string) {
+  // Step 1: First request — pays with MPP
+  const r1 = await fetch(`${serverUrl}/agent/step`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-PAYMENT': 'stub_payment_accepted',  // stub mode for testing
+    },
+    body: JSON.stringify({ step: 'search', query: 'latest AI papers' }),
+  });
+
+  const step1 = await r1.json();
+  const sessionId = step1.sessionId;
+  const vaultId   = step1.vaultId;
+
+  console.log('Session created:', sessionId);
+  console.log('Vault created:', vaultId);
+
+  // Step 2: Reuses session — no payment
+  const r2 = await fetch(`${serverUrl}/agent/step`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-PRUDRA-SESSION-ID': sessionId,
+    },
+    body: JSON.stringify({ step: 'summarise', query: 'latest AI papers' }),
+  });
+
+  const step2 = await r2.json();
+  console.log('Same vault:', step2.vaultId === vaultId); // true
+
+  // Step 3: Seal the session vault
+  const r3 = await fetch(`${serverUrl}/agent/finish`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-PRUDRA-SESSION-ID': sessionId,
+    },
+    body: JSON.stringify({}),
+  });
+
+  const finish = await r3.json();
+  console.log('Session complete:', finish.status);
+  console.log('All documents:', finish.documents.length); // 2
+}
+```
+
+## What the vault contains after all steps
+
+```typescript
+// After all steps, read the vault manifest
+const manifest = await vault.getManifest();
+
+console.log('Documents:', manifest.documents.length);  // one per step
+console.log('Events:', manifest.events.length);         // one per vault.emit() call
+console.log('Files:', manifest.files.length);           // any files uploaded during steps
+
+// Each document from each step
+for (const doc of manifest.documents) {
+  console.log(doc.name, doc.data);
+}
+```
+
+## Related
+
+- [Add session payments](/payments/sessions/add) — configure the server for sessions
+- [Session expiry and renewal](/payments/sessions/expiry) — what happens when a session expires
+- [Vault overview](/storage/vaults/overview) — how vaults work, what they store
+- [Subscribe to vault events](/storage/events/subscribe) — watch multi-step progress in real time

@@ -1,0 +1,77 @@
+---
+title: "Download files"
+description: "Download vault files from the Prudra CDN at assets.prudra.dev."
+---
+
+## Download files
+
+Files stored in vaults are served from the Prudra CDN at `assets.prudra.dev`. CDN URLs are returned when you upload a file and are included in the vault manifest.
+
+## Getting file URLs
+
+File URLs are available in several places:
+
+```typescript
+// From upload response
+const file = await vault.addFile(buffer, 'report.pdf', 'application/pdf');
+console.log(file.url);  // https://assets.prudra.dev/org_abc/vlt_xyz/report.pdf
+
+// From vault manifest
+const manifest = await vault.getManifest();
+for (const f of manifest.files) {
+  console.log(f.name, f.url);
+}
+
+// From vault query
+const vault = await getVault({ vaultId: 'vlt_clx1abc123' });
+for (const f of vault.files) {
+  console.log(f.name, f.url);
+}
+```
+
+## CDN download
+
+CDN URLs are publicly accessible — no authentication required. Return them directly to your callers:
+
+```typescript
+res.json({
+  reportUrl: 'https://assets.prudra.dev/org_abc/vlt_xyz/report.pdf',
+});
+```
+
+The caller can download the file directly from the CDN without going through your server.
+
+## Authenticated download
+
+If you need authenticated access (e.g., for sensitive files), use the API endpoint with a vault access token:
+
+```bash
+# Download via API (authenticated)
+curl https://api.prudra.dev/vaults/vlt_clx1abc123/files/fil_clx1abc123 \
+  -H "Authorization: Bearer vat_..." \
+  --output report.pdf
+```
+
+## CDN URL lifetime
+
+CDN URLs are valid for the lifetime of the vault. When the vault expires or is deleted, the CDN URL becomes invalid and returns 404. Persist the vault if you need long-lived CDN URLs.
+
+## From Node.js
+
+```typescript
+import { getVault } from '@prudra/vault';
+
+const vault = await getVault({ vaultId: 'vlt_clx1abc123' });
+
+for (const file of vault.files) {
+  const response = await fetch(file.url);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  // Process the file buffer
+}
+```
+
+## Related
+
+- [Upload files](/storage/files/upload) — upload files to a vault
+- [Delete files](/storage/files/delete) — remove files
+- [Persist a vault](/storage/vaults/persist) — ensure CDN URLs stay valid long-term

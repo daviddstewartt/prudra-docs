@@ -1,122 +1,473 @@
 {
   "$schema": "https://mintlify.com/docs.json",
+  "name": "Prudra",
+  "description": "The Infrastructure Layer for Enterprise AI Agents — Payments, Storage, and Discovery for agent developers.",
   "theme": "mint",
-  "name": "Mint Starter Kit",
-  "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+  "logo": {
+    "light": "/logo/light.png",
+    "dark": "/logo/dark.png",
+    "href": "https://prudra.com"
   },
   "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#7ea9ff",
+    "light": "#bdd4ff",
+    "dark": "#2f4d94"
+  },
+  "appearance": {
+    "default": "system"
+  },
+  "api": {
+    "openapi": "./api-reference/openapi.json",
+    "playground": {
+      "display": "interactive"
+    },
+    "examples": {
+      "languages": ["typescript", "python", "curl"]
+    }
+  },
+  "navbar": {
+    "links": [
+      { "label": "Dashboard", "href": "https://dashboard.prudra.com" },
+      { "label": "Status", "href": "https://status.prudra.com" }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Get started free",
+      "href": "https://dashboard.prudra.com/signup"
+    }
+  },
+  "contextual": {
+    "options": ["copy", "view", "chatgpt", "claude", "perplexity", "mcp", "cursor", "vscode"]
+  },
   "navigation": {
+    "global": {
+      "anchors": [
+        {
+          "anchor": "GitHub",
+          "icon": "github",
+          "href": "https://github.com/prudra"
+        },
+        {
+          "anchor": "Support",
+          "icon": "envelope",
+          "href": "mailto:support@prudra.com"
+        }
+      ]
+    },
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Docs",
+        "icon": "book-open",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "get-started/overview",
+              "get-started/quickstart",
+              "get-started/core-concepts",
+              "get-started/authentication"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Payments",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "payments/overview",
+              "payments/accept-a-payment",
+              {
+                "group": "x402 Payments",
+                "pages": [
+                  "payments/x402/overview",
+                  "payments/x402/how-it-works",
+                  "payments/x402/add-to-endpoint",
+                  "payments/x402/test",
+                  "payments/x402/handle-response"
+                ]
+              },
+              {
+                "group": "MPP Payments",
+                "pages": [
+                  "payments/mpp/overview",
+                  "payments/mpp/how-it-works",
+                  "payments/mpp/add-to-endpoint",
+                  "payments/mpp/test",
+                  "payments/mpp/authorization"
+                ]
+              },
+              {
+                "group": "Dual-Protocol",
+                "pages": [
+                  "payments/dual-protocol/overview",
+                  "payments/dual-protocol/challenge",
+                  "payments/dual-protocol/pick-protocol"
+                ]
+              },
+              {
+                "group": "Session Payments",
+                "pages": [
+                  "payments/sessions/overview",
+                  "payments/sessions/how-it-works",
+                  "payments/sessions/add",
+                  "payments/sessions/multi-step",
+                  "payments/sessions/expiry"
+                ]
+              },
+              {
+                "group": "Payment Security",
+                "pages": [
+                  "payments/security/replay",
+                  "payments/security/harvesting",
+                  "payments/security/audit-logs"
+                ]
+              }
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Wallets",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "wallets/overview",
+              "wallets/choose-wallet-type",
+              {
+                "group": "Managed Wallets",
+                "pages": [
+                  "wallets/managed/overview",
+                  "wallets/managed/how-it-works",
+                  "wallets/managed/provision",
+                  "wallets/managed/child-addresses",
+                  "wallets/managed/check-balance",
+                  "wallets/managed/transactions",
+                  "wallets/managed/key-rotation",
+                  "wallets/managed/supported-chains"
+                ]
+              },
+              {
+                "group": "BYO Wallets",
+                "pages": [
+                  "wallets/byo/overview",
+                  "wallets/byo/register",
+                  "wallets/byo/monitor-deposits",
+                  "wallets/byo/chains-tokens",
+                  "wallets/byo/deregister"
+                ]
+              },
+              {
+                "group": "Transfers",
+                "pages": [
+                  "wallets/transfers/overview",
+                  "wallets/transfers/routing",
+                  "wallets/transfers/send",
+                  "wallets/transfers/cross-chain",
+                  "wallets/transfers/fees",
+                  "wallets/transfers/track-status"
+                ]
+              },
+              {
+                "group": "Withdrawals",
+                "pages": [
+                  "wallets/withdrawals/overview",
+                  "wallets/withdrawals/bank-account",
+                  "wallets/withdrawals/request",
+                  "wallets/withdrawals/track",
+                  "wallets/withdrawals/currencies"
+                ]
+              }
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Storage",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "storage/overview",
+              {
+                "group": "Vaults",
+                "pages": [
+                  "storage/vaults/overview",
+                  "storage/vaults/create",
+                  "storage/vaults/access-control",
+                  "storage/vaults/seal",
+                  "storage/vaults/persist",
+                  "storage/vaults/query",
+                  "storage/vaults/ttl-expiry",
+                  "storage/vaults/delete",
+                  "storage/vaults/quota"
+                ]
+              },
+              {
+                "group": "Real-Time Events",
+                "pages": [
+                  "storage/events/overview",
+                  "storage/events/emit",
+                  "storage/events/subscribe-sse",
+                  "storage/events/event-reference"
+                ]
+              },
+              {
+                "group": "File Delivery",
+                "pages": [
+                  "storage/files/overview",
+                  "storage/files/upload",
+                  "storage/files/download",
+                  "storage/files/delete"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Webhooks",
+            "pages": [
+              "webhooks/overview",
+              "webhooks/register",
+              "webhooks/verify-signatures",
+              "webhooks/retry-behaviour",
+              "webhooks/event-reference",
+              "webhooks/test-locally"
+            ]
+          },
+          {
+            "group": "Discovery",
+            "pages": [
+              "discovery/overview",
+              {
+                "group": "Route Registry",
+                "pages": [
+                  "discovery/registry/overview",
+                  "discovery/registry/route-snapshot",
+                  "discovery/registry/query-routes",
+                  "discovery/registry/pricing-signals"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Platform",
+            "pages": [
+              {
+                "group": "Billing & Plans",
+                "pages": [
+                  "platform/billing/overview",
+                  "platform/billing/plans",
+                  "platform/billing/usage"
+                ]
+              },
+              {
+                "group": "Organisations",
+                "pages": [
+                  "platform/orgs/overview",
+                  "platform/orgs/api-keys",
+                  "platform/orgs/members"
+                ]
+              },
+              {
+                "group": "Security",
+                "pages": [
+                  "platform/security/overview",
+                  "platform/security/key-custody",
+                  "platform/security/audit-logs"
+                ]
+              }
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
+        "icon": "square-terminal",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Overview",
             "pages": [
               "api-reference/introduction"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Account",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api-reference/account/get-current-account",
+              "api-reference/account/account-usage-organisation",
+              "api-reference/account/payment-log-summary-account-scope",
+              "api-reference/account/list-payment-logs-account-scope",
+              "api-reference/account/get-one-payment-log"
+            ]
+          },
+          {
+            "group": "Billing",
+            "pages": [
+              "api-reference/billing/get-current-usage",
+              "api-reference/billing/get-current-plan",
+              "api-reference/billing/rebuild-usage-cache"
+            ]
+          },
+          {
+            "group": "Organisation",
+            "pages": [
+              "api-reference/organisation/create-an-organisation",
+              "api-reference/organisation/get-current-organisation",
+              "api-reference/organisation/update-current-organisation",
+              "api-reference/organisation/usage-metrics-for-current-organisation",
+              "api-reference/organisation/list-organisation-members",
+              "api-reference/organisation/add-a-member",
+              "api-reference/organisation/remove-a-member",
+              "api-reference/organisation/update-a-member-role",
+              "api-reference/organisation/list-api-keys",
+              "api-reference/organisation/create-an-api-key",
+              "api-reference/organisation/revoke-an-api-key"
+            ]
+          },
+          {
+            "group": "Payments",
+            "pages": [
+              "api-reference/payments/generate-a-dual-payment-challenge",
+              "api-reference/payments/verify-a-payment-credential",
+              "api-reference/payments/settle-an-x402-payment-on-chain",
+              "api-reference/payments/list-payment-logs",
+              "api-reference/payments/payment-log-summary-by-route",
+              "api-reference/payments/get-payment-by-id"
+            ]
+          },
+          {
+            "group": "Registry",
+            "pages": [
+              "api-reference/registry/submit-route-registry-snapshot"
+            ]
+          },
+          {
+            "group": "Sessions",
+            "pages": [
+              "api-reference/sessions/create-a-payment-session",
+              "api-reference/sessions/get-a-payment-session"
+            ]
+          },
+          {
+            "group": "Vaults",
+            "pages": [
+              "api-reference/vaults/create-a-vault",
+              "api-reference/vaults/vault-quota-status",
+              "api-reference/vaults/get-a-vault",
+              "api-reference/vaults/delete-a-vault",
+              "api-reference/vaults/upload-a-file-to-a-vault",
+              "api-reference/vaults/add-a-document-to-a-vault",
+              "api-reference/vaults/emit-a-vault-event",
+              "api-reference/vaults/seal-a-vault",
+              "api-reference/vaults/persist-a-vault",
+              "api-reference/vaults/extend-vault-ttl",
+              "api-reference/vaults/issue-a-vault-access-token",
+              "api-reference/vaults/subscribe-to-vault-events-sse"
+            ]
+          },
+          {
+            "group": "Organisation Wallet",
+            "pages": [
+              "api-reference/organisation-wallet/get-organisation-receiving-wallet-legacy",
+              "api-reference/organisation-wallet/provision-receiving-wallet-legacy",
+              "api-reference/organisation-wallet/legacy-wallet-balance",
+              "api-reference/organisation-wallet/legacy-wallet-payment-history",
+              "api-reference/organisation-wallet/withdraw-from-legacy-receiving-wallet"
+            ]
+          },
+          {
+            "group": "Webhooks",
+            "pages": [
+              "api-reference/webhooks/list-webhooks",
+              "api-reference/webhooks/register-a-webhook",
+              "api-reference/webhooks/delete-a-webhook",
+              "api-reference/webhooks/update-a-webhook",
+              "api-reference/webhooks/replay-a-webhook-delivery",
+              "api-reference/webhooks/list-webhook-delivery-attempts",
+              "api-reference/webhooks/alchemy-address_activity-webhook-inbound"
+            ]
+          },
+          {
+            "group": "Wallets",
+            "pages": [
+              "api-reference/wallets/list-byo-wallets",
+              "api-reference/wallets/register-a-byo-wallet",
+              "api-reference/wallets/get-a-byo-wallet",
+              "api-reference/wallets/deregister-a-byo-wallet",
+              "api-reference/wallets/list-byo-wallet-transactions",
+              "api-reference/wallets/get-byo-wallet-balances",
+              "api-reference/wallets/list-managed-wallets",
+              "api-reference/wallets/provision-a-managed-master-wallet",
+              "api-reference/wallets/get-a-managed-wallet",
+              "api-reference/wallets/list-child-addresses",
+              "api-reference/wallets/derive-a-child-address",
+              "api-reference/wallets/get-managed-wallet-balances",
+              "api-reference/wallets/list-wallet-transactions"
+            ]
+          },
+          {
+            "group": "Chains",
+            "pages": [
+              "api-reference/chains/list-supported-tokens-for-a-chain"
+            ]
+          },
+          {
+            "group": "Transfers",
+            "pages": [
+              "api-reference/transfers/send-a-token-transfer"
+            ]
+          },
+          {
+            "group": "Withdrawals",
+            "pages": [
+              "api-reference/withdrawals/list-bank-accounts",
+              "api-reference/withdrawals/add-a-bank-account",
+              "api-reference/withdrawals/remove-a-bank-account",
+              "api-reference/withdrawals/request-a-withdrawal-to-bank",
+              "api-reference/withdrawals/list-withdrawals",
+              "api-reference/withdrawals/get-a-withdrawal"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Agent Guides",
+        "icon": "robot",
+        "groups": [
+          {
+            "group": "Agent Guides",
+            "pages": [
+              "agent-guides/overview",
+              "agent-guides/quickstart",
+              "agent-guides/payments",
+              "agent-guides/vault",
+              "agent-guides/wallet",
+              "agent-guides/webhooks",
+              "agent-guides/troubleshooting"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
+    ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+      "github": "https://github.com/prudra",
+      "twitter": "https://twitter.com/prudrahq"
+    },
+    "links": [
+      {
+        "header": "Product",
+        "items": [
+          { "label": "Payments", "href": "https://prudra.com/products/payments" },
+          { "label": "Wallets", "href": "https://prudra.com/products/wallet" },
+          { "label": "Storage", "href": "https://prudra.com/products/vault" },
+          { "label": "Discovery", "href": "https://prudra.com/products/discovery" }
+        ]
+      },
+      {
+        "header": "Company",
+        "items": [
+          { "label": "About", "href": "https://prudra.com/about" },
+          { "label": "Blog", "href": "https://prudra.com/blog" },
+          { "label": "Status", "href": "https://status.prudra.com" },
+          { "label": "Support", "href": "mailto:support@prudra.com" }
+        ]
+      }
+    ]
+  },
+  "seo": {
+    "indexing": "navigable"
+  },
+  "search": {
+    "prompt": "Search Prudra docs..."
   }
 }

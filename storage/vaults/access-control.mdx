@@ -1,0 +1,112 @@
+---
+title: "Access control"
+description: "Issue short-lived access tokens to share vault read access with clients."
+---
+
+## Access control
+
+Vaults are private by default — only requests authenticated with your API key can read them. To share a vault with a client (e.g., give the caller access to their results), issue a short-lived vault access token.
+
+## Issue a vault access token
+
+<Tabs>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { issueVaultAccessToken } from '@prudra/vault';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const token = await issueVaultAccessToken({
+  vaultId:    'vlt_clx1abc123',
+  ttlSeconds: 3600,  // 1 hour
+});
+
+console.log(token.accessToken);  // 'vat_...'
+console.log(token.expiresAt);    // ISO timestamp
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X POST https://api.prudra.dev/vaults/vlt_clx1abc123/access-token \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "ttlSeconds": 3600 }'
+```
+
+Response:
+
+```json
+{
+  "accessToken": "vat_clx1abc123xyz",
+  "vaultId":     "vlt_clx1abc123",
+  "expiresAt":   "2026-04-30T10:00:00.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Using the access token
+
+The client uses the access token as a Bearer token to read vault contents:
+
+```bash
+# Read vault documents
+curl https://api.prudra.dev/vaults/vlt_clx1abc123 \
+  -H "Authorization: Bearer vat_clx1abc123xyz"
+
+# Subscribe to SSE events
+curl -N https://api.prudra.dev/vaults/vlt_clx1abc123/events \
+  -H "Authorization: Bearer vat_clx1abc123xyz"
+```
+
+## Access token permissions
+
+Vault access tokens are read-only — they allow:
+- Reading vault metadata (`GET /vaults/:id`)
+- Listing and reading documents
+- Downloading files
+- Subscribing to the SSE event stream
+
+They do not allow writing documents, uploading files, emitting events, sealing, persisting, or deleting the vault.
+
+## Typical pattern: return token in response
+
+Issue the access token in your payment handler and return it alongside the vault ID:
+
+```typescript
+app.post('/generate', walletMiddleware(...), payMiddleware(...), vaultMiddleware(), async (req, res) => {
+  const vault = req.vault!;
+
+  // Start async work
+  processInBackground(vault);
+
+  // Issue read token so caller can stream progress
+  const token = await issueVaultAccessToken({
+    vaultId:    vault.id,
+    ttlSeconds: 3600,
+  });
+
+  res.json({
+    vaultId:      vault.id,
+    accessToken:  token.accessToken,
+    streamUrl:    `https://api.prudra.dev/vaults/${vault.id}/events`,
+  });
+});
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vaultId` | string | Yes | The vault to grant access to |
+| `ttlSeconds` | number | No | Token lifetime in seconds (default: 3600; max: 86400) |
+
+## Related
+
+- [Events — subscribe SSE](/storage/events/subscribe-sse) — using access tokens to subscribe to events
+- [Seal a vault](/storage/vaults/seal) — finalising work before sharing

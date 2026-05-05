@@ -1,0 +1,120 @@
+---
+title: "Troubleshooting"
+description: "Common errors and fixes for agents using the Prudra payment protocol."
+---
+
+## Troubleshooting
+
+## Payment errors
+
+### 402 on retry — payment not accepted
+
+**Symptom**: You send `PAYMENT-SIGNATURE` and still get 402.
+
+**Causes and fixes**:
+
+| Cause | Fix |
+|---|---|
+| Challenge expired | Challenges expire in ~60 seconds. Fetch a fresh challenge by making a new unauthenticated request before signing. |
+| Wrong header name | x402 uses `PAYMENT-SIGNATURE`. MPP uses `Authorization: Payment <credential>`. Check you're using the right header. |
+| Invalid signature | Ensure you're signing the ERC-3009 payload from the decoded `PAYMENT-REQUIRED` header, not arbitrary data. |
+| Insufficient USDC balance | Check your wallet holds enough USDC. On testnet, use the Circle faucet. |
+
+### 409 — duplicate payment (replay)
+
+**Symptom**: Your second attempt fails with 409 after you already paid.
+
+**Cause**: The txHash or nonce was already used. This means the first request succeeded — you're seeing the replay protection working.
+
+**Fix**: Check your first response — it likely succeeded. The vault result is available. Don't retry with the same payment.
+
+### Challenge expired
+
+ERC-3009 authorizations have a `validBefore` timestamp. If your signing takes too long or clocks are out of sync:
+
+```typescript
+// Request a fresh challenge just before signing
+const r1 = await fetch(url, { method: 'POST', ... });  // get fresh challenge
+const requirements = decodePaymentRequirements(r1.headers.get('payment-required')!);
+// Sign immediately after — don't wait
+const { xPaymentHeader } = await signX402Payment(wallet, option);
+```
+
+## Vault errors
+
+### Vault expired (404 on vault read)
+
+**Cause**: The vault TTL elapsed and contents were deleted.
+
+**Fix**: 
+- Read vault contents immediately after the payment while the vault is still active
+- Ask the server to persist the vault (`vault.persist()`) in their handler
+- Check the `expiresAt` field when the vault is returned
+
+### Cannot read vault — 401 Unauthorized
+
+**Cause**: Using an expired vault access token, or using your API key for a vault that belongs to a different organisation.
+
+**Fix**: Request a new vault access token from the server, or use your org's API key.
+
+## MPP errors
+
+### Challenge ID mismatch
+
+**Symptom**: MPP credential rejected with `challenge-id-mismatch`.
+
+**Cause**: The `challengeId` in your credential doesn't match what the server computes.
+
+**Fix**: Ensure you're copying the `id` field verbatim from the `WWW-Authenticate` header. Don't modify it.
+
+### Tempo RPC connection failed
+
+**Cause**: Wrong Tempo RPC URL or Tempo network is down.
+
+**Fix**: Check `TEMPO_RPC_URL` in your environment. Use the Tempo testnet RPC for testing.
+
+## Network errors
+
+### 503 — bridge unavailable
+
+**Cause**: Li.Fi bridge temporarily unavailable for your token pair.
+
+**Fix**: Retry with exponential backoff. Bridge availability is typically restored within minutes.
+
+### Request timeout
+
+**Cause**: Webhook endpoint or payment handler is slow to respond.
+
+**Fix**: Respond 200 immediately, process asynchronously. Prudra's timeout for webhook delivery is 10 seconds.
+
+## Debugging tips
+
+Enable payment debug logging:
+
+```bash
+PRUDRA_DEBUG=true npx tsx your-agent.ts
+```
+
+Check payment logs via API:
+
+```bash
+curl "https://api.prudra.dev/payments/logs?limit=10" \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Use stub mode to test the payment flow without real funds:
+
+```bash
+# Server side
+PAYMENT_STUB_MODE=true npx tsx server.ts
+
+# Agent side — any private key works
+AGENT_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 npx tsx agent.ts
+```
+
+## Related
+
+- [x402 — how it works](/payments/x402/how-it-works) — full x402 flow
+- [MPP — authorization](/payments/mpp/authorization) — MPP credential format
+- [Payment security](/payments/security/replay) — replay protection details
+- [Support](mailto:support@prudra.com) — contact us if you're still stuck

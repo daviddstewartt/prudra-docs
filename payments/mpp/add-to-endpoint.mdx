@@ -1,0 +1,133 @@
+---
+title: "Add MPP to an endpoint"
+description: "Configure payMiddleware to accept MPP payments on a specific route."
+---
+
+## Add MPP to an endpoint
+
+`payMiddleware` generates MPP challenges by default as part of dual-protocol. No additional configuration is needed for basic MPP support. The configuration below shows the full middleware chain with notes on MPP-specific behaviour.
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard support for managing paid endpoints is coming soon. Use the SDK to configure MPP on your routes.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import express from 'express';
+import { initialise } from '@prudra/core';
+import { walletMiddleware, payMiddleware, vaultMiddleware } from '@prudra/express';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const app = express();
+app.use(express.json());
+app.use(walletMiddleware({ walletId: process.env.BYO_WALLET_ID }));
+
+app.post(
+  '/analyse',
+  payMiddleware({
+    price: '0.05',
+    description: 'Document analysis',
+    // acceptSessions: true  // uncomment to enable session payments (Pro plan)
+  }),
+  vaultMiddleware(),
+  async (req, res) => {
+    // req.payment.protocol is 'mpp' if the agent paid with MPP
+    console.log('Paid via:', req.payment!.protocol);
+
+    await req.vault!.addDocument({ result: 'analysis done' }, 'Result');
+    await req.vault!.seal('Complete');
+
+    res.json({
+      vaultId:   req.vault!.id,
+      protocol:  req.payment!.protocol,
+      sessionId: req.sessionId ?? null,  // only set for session payments
+    });
+  }
+);
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+# Without payment — see the WWW-Authenticate header in the 402
+curl -i -X POST http://localhost:4001/analyse \
+  -H "Content-Type: application/json" \
+  -d '{"text": "analyse this"}'
+
+# With stub payment
+curl -X POST http://localhost:4001/analyse \
+  -H "Content-Type: application/json" \
+  -H "X-PAYMENT: stub_payment_accepted" \
+  -d '{"text": "analyse this"}'
+```
+
+  </Tab>
+</Tabs>
+
+## What the 402 response includes
+
+When a request arrives without payment, the MPP challenge appears in the `WWW-Authenticate` header:
+
+```
+HTTP/1.1 402 Payment Required
+WWW-Authenticate: Payment id="ch_abc123",
+  realm="your-api.com",
+  method="tempo",
+  intent="charge",
+  request="eyJhbW91bnQiOiIxMDAwMCIsInJlY2lwaWVudCI6IjB4..."
+PAYMENT-REQUIRED: eyJwcmljZSI6IjAuMDUiLCJ...
+Cache-Control: no-store
+Content-Type: application/problem+json
+
+{
+  "type": "https://api.prudra.dev/problems/payment-required",
+  "status": 402,
+  "title": "Payment Required",
+  "detail": "See WWW-Authenticate (MPP) or PAYMENT-REQUIRED (x402)."
+}
+```
+
+Both headers are always present. The agent parses the `WWW-Authenticate` header to get the MPP challenge parameters.
+
+## What the 200 response includes
+
+After successful MPP payment:
+
+```json
+{
+  "vaultId": "vlt_clx1abc123",
+  "result": "...",
+  "protocol": "mpp",
+  "sessionId": null
+}
+```
+
+If session payments are enabled (`acceptSessions: true`) and the agent is starting a new session, the response also includes the `X-PRUDRA-SESSION-ID` header and `sessionId` in the body.
+
+## payMiddleware options for MPP
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `price` | string | Yes | Payment amount in USD |
+| `description` | string | No | Human-readable description |
+| `acceptSessions` | boolean | No | Enable session payments (Pro plan). Default: `false` |
+
+## Error handling
+
+| Error | Status | Cause |
+|---|---|---|
+| `payment-verification-failed` | 402 | HMAC mismatch or transaction not found on Tempo |
+| `duplicate-payment` | 409 | Same `txHash` used twice (replay blocked) |
+| `challenge-expired` | 402 | Challenge expired — agent must request a new one |
+| `insufficient-payment` | 402 | Transaction amount less than required price |
+
+## Next steps
+
+- [Test MPP payments](/payments/mpp/test) — test the full MPP agent flow
+- [Handle the Authorization header](/payments/mpp/authorization) — credential format details
+- [Add session payments](/payments/sessions/add) — one MPP payment per multi-step workflow

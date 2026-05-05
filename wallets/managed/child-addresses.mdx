@@ -1,0 +1,134 @@
+---
+title: "Derive child addresses"
+description: "Generate unique EVM deposit addresses from a managed master wallet — unlimited on all plans."
+---
+
+## Derive child addresses
+
+Child addresses are unique EVM addresses derived from a managed master wallet using BIP-44 hierarchical deterministic derivation. Each derivation call produces a new address with its own BIP-44 path index. Child addresses are unlimited on all plans.
+
+Use child addresses to issue unique deposit addresses to customers, separate payment flows by product, or isolate funds by use case.
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard support for child address management is coming soon. Use the SDK or cURL to derive and list child addresses.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { deriveChildAddress, listChildAddresses } from '@prudra/wallet';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+// Derive a child address from a master wallet
+const child = await deriveChildAddress({
+  masterWalletId: 'mwt_clx1abc123',
+  name:           'Customer A — order payments',
+  metadata:       { customerId: 'cust_a456', platform: 'your-app' },
+});
+
+console.log(child.id);             // caddr_clx1def456
+console.log(child.address);        // 0x1234abcd...
+console.log(child.derivationPath); // m/44'/60'/0'/0/1
+console.log(child.name);           // 'Customer A — order payments'
+
+// List all child addresses for a master wallet
+const children = await listChildAddresses('mwt_clx1abc123');
+console.log(`${children.length} child addresses`);
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+# Derive a child address
+curl -X POST \
+  https://api.prudra.dev/wallet-infra/master-wallets/mwt_clx1abc123/child-addresses \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Customer A — order payments",
+    "metadata": { "customerId": "cust_a456" }
+  }'
+```
+
+Response:
+
+```json
+{
+  "id":             "caddr_clx1def456",
+  "masterWalletId": "mwt_clx1abc123",
+  "address":        "0x1234abcd...",
+  "derivationPath": "m/44'/60'/0'/0/1",
+  "name":           "Customer A — order payments",
+  "metadata":       { "customerId": "cust_a456" },
+  "createdAt":      "2026-04-30T09:00:00.000Z"
+}
+```
+
+```bash
+# List child addresses
+curl https://api.prudra.dev/wallet-infra/master-wallets/mwt_clx1abc123/child-addresses \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+  </Tab>
+</Tabs>
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `masterWalletId` | string | Yes | The ID of the master wallet to derive from. |
+| `name` | string | No | Human-readable label. Useful for identifying the customer or use case in the dashboard. |
+| `metadata` | object | No | Arbitrary JSON metadata. Store your own IDs here (e.g. `customerId`, `orderId`). |
+
+## Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Child address ID. Prefix: `caddr_`. |
+| `masterWalletId` | string | The parent master wallet. |
+| `address` | string | The EVM address. Share this as the deposit address. |
+| `derivationPath` | string | The BIP-44 path (e.g. `m/44'/60'/0'/0/3`). Deterministic — the same index always yields the same address. |
+| `name` | string | The name you provided, or `null`. |
+| `metadata` | object | The metadata object you provided, or `{}`. |
+| `createdAt` | string | ISO timestamp. |
+
+## Use child addresses in transfers
+
+To send funds from a child address, use `fromWalletType: 'child'`:
+
+```typescript
+import { transfer } from '@prudra/wallet';
+import { Chain, Token } from '@prudra/core';
+
+const result = await transfer({
+  fromWalletId:   'caddr_clx1def456',
+  fromWalletType: 'child',          // ← child address
+  fromToken:      Token.USDC,
+  toAddress:      '0xRecipient...',
+  toChain:        Chain.BASE,
+  toToken:        Token.USDC,
+  amount:         '5.00',
+});
+```
+
+## Derivation uniqueness
+
+Each `deriveChildAddress()` call increments the BIP-44 address index. Addresses are guaranteed unique across all calls within the same master wallet. The derivation is deterministic — if you call `deriveChildAddress()` with the same master wallet, you get a new unique address each time (not the same one).
+
+Child address at index `n` is always `m/44'/coin_type'/0'/0/n`. The address is the same regardless of when you derive it — useful for key recovery scenarios.
+
+## Plan limits
+
+Child addresses are **unlimited on all plans** (Hobby, Pro, Enterprise). There is no per-plan limit on how many child addresses you can derive.
+
+## Next steps
+
+- [Check a wallet balance](/wallets/managed/check-balance) — query balances for child addresses
+- [Send a transfer](/wallets/transfers/send) — move funds from a child address
+- [Monitor deposits](/wallets/byo/monitor-deposits) — how deposit detection works

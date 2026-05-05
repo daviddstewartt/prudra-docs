@@ -1,0 +1,194 @@
+---
+title: "Event reference"
+description: "All Prudra webhook event types and their full payload schemas."
+---
+
+## Event reference
+
+All webhook events share a common envelope. Below is the full schema for each event type.
+
+## Envelope
+
+```json
+{
+  "type":    "payment.received",
+  "eventId": "evt_clx1abc123",
+  "payload": { ... }
+}
+```
+
+## Payment events
+
+### `payment.received`
+
+Fired when a payment is successfully verified and the vault is created.
+
+```json
+{
+  "type":    "payment.received",
+  "eventId": "evt_clx1abc123",
+  "payload": {
+    "vaultId":   "vlt_clx1abc123",
+    "walletId":  "mwt_clx1abc123",
+    "amount":    "0.10",
+    "token":     "USDC",
+    "chain":     "base",
+    "protocol":  "x402",
+    "txHash":    "0xabc...",
+    "route":     "/api/analyse",
+    "receivedAt": "2026-04-30T09:00:00.000Z"
+  }
+}
+```
+
+## Vault events
+
+### `vault.sealed`
+
+Fired when `vault.seal()` is called.
+
+```json
+{
+  "type":    "vault.sealed",
+  "eventId": "evt_clx1abc123",
+  "payload": {
+    "vaultId":  "vlt_clx1abc123",
+    "summary":  "Processed 47 items",
+    "sealedAt": "2026-04-30T09:05:00.000Z"
+  }
+}
+```
+
+### `vault.expiring`
+
+Fired 1 hour before vault TTL expires.
+
+```json
+{
+  "type":    "vault.expiring",
+  "eventId": "evt_clx1abc123",
+  "payload": {
+    "vaultId":   "vlt_clx1abc123",
+    "expiresAt": "2026-05-01T09:00:00.000Z"
+  }
+}
+```
+
+### `vault.expired`
+
+Fired when vault expires and contents are deleted.
+
+```json
+{
+  "type":    "vault.expired",
+  "eventId": "evt_clx1abc123",
+  "payload": {
+    "vaultId":   "vlt_clx1abc123",
+    "expiredAt": "2026-05-01T09:00:00.000Z"
+  }
+}
+```
+
+## Deposit events
+
+### `deposit.success`
+
+Fired when a deposit is detected on a BYO wallet.
+
+```json
+{
+  "type":    "deposit.success",
+  "eventId": "evt_clx1abc123",
+  "payload": {
+    "walletId":    "byw_clx1abc123",
+    "txHash":      "0xabc...",
+    "amount":      "10.50",
+    "tokenSymbol": "USDC",
+    "chain":       "base",
+    "from":        "0xSender...",
+    "confirmedAt": "2026-04-30T09:00:00.000Z"
+  }
+}
+```
+
+## Transfer events
+
+### `transfer.completed`
+
+Fired when a bridge transfer is confirmed on the destination chain.
+
+```json
+{
+  "type":    "transfer.completed",
+  "eventId": "evt_clx1abc123",
+  "payload": {
+    "transactionId": "wtx_clx1abc123",
+    "walletId":      "mwt_clx1abc123",
+    "route":         "lifi-bridge",
+    "fromChain":     "base",
+    "toChain":       "polygon",
+    "amount":        "10.00",
+    "fromToken":     "USDC",
+    "toToken":       "USDC",
+    "txHash":        "0xdest...",
+    "confirmedAt":   "2026-04-30T09:15:00.000Z"
+  }
+}
+```
+
+### `transfer.failed`
+
+Fired when a bridge transfer fails and funds are refunded.
+
+```json
+{
+  "type":    "transfer.failed",
+  "eventId": "evt_clx1abc123",
+  "payload": {
+    "transactionId": "wtx_clx1abc123",
+    "route":         "lifi-bridge",
+    "reason":        "bridge-liquidity-exceeded",
+    "refundTxHash":  "0xrefund...",
+    "refundedAt":    "2026-04-30T09:20:00.000Z"
+  }
+}
+```
+
+## Withdrawal events
+
+### `withdrawal.completed`
+
+```json
+{
+  "type":    "withdrawal.completed",
+  "eventId": "evt_clx1abc123",
+  "payload": {
+    "withdrawalId": "wdr_clx1abc123",
+    "walletId":     "mwt_clx1abc123",
+    "amount":       "100.00",
+    "token":        "USDC",
+    "reference":    "WD-001",
+    "completedAt":  "2026-05-02T14:30:00.000Z"
+  }
+}
+```
+
+### `withdrawal.failed`
+
+```json
+{
+  "type":    "withdrawal.failed",
+  "eventId": "evt_clx1abc123",
+  "payload": {
+    "withdrawalId": "wdr_clx1abc123",
+    "reason":       "wire-rejected-by-bank",
+    "failedAt":     "2026-05-02T14:30:00.000Z"
+  }
+}
+```
+
+## Related
+
+- [Register a webhook](/webhooks/register) — subscribe to specific event types
+- [Verify signatures](/webhooks/verify-signatures) — validate event authenticity
+- [Retry behaviour](/webhooks/retry-behaviour) — delivery guarantees

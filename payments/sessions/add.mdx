@@ -1,0 +1,168 @@
+---
+title: "Add session payments"
+description: "Enable session payments on an endpoint and handle the session ID across multiple requests."
+---
+
+## Add session payments
+
+Add `acceptSessions: true` to `payMiddleware` on any route that should support session payments. The session ID is returned in the `X-PRUDRA-SESSION-ID` response header on the first request. Subsequent requests include this header to reuse the session without paying again.
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard support for session payment configuration is coming soon. Use the SDK to enable sessions on your routes.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import express from 'express';
+import { initialise } from '@prudra/core';
+import { walletMiddleware, payMiddleware, vaultMiddleware } from '@prudra/express';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const app = express();
+app.use(express.json());
+
+app.post(
+  '/agent/step',
+  walletMiddleware({ walletId: process.env.BYO_WALLET_ID }),
+  payMiddleware({
+    price:          '0.01',
+    description:    'Agent step',
+    acceptSessions: true,   // Enable session payments
+  }),
+  vaultMiddleware(),
+  async (req, res) => {
+    const { step, query } = req.body as { step: string; query: string };
+    const vault           = req.vault!;
+
+    // Simulate step-specific work
+    const result = { step, query, output: `Completed: ${step}` };
+
+    // All session requests share this vault — documents accumulate
+    await vault.emit('agent.step', { step, completedAt: new Date().toISOString() });
+    await vault.addDocument(result, `Step: ${step}`);
+
+    res.json({
+      vaultId:   vault.id,        // same across all session requests
+      sessionId: req.sessionId,   // return so agent can include in next request
+      step,
+      result,
+    });
+  }
+);
+
+app.post(
+  '/agent/finish',
+  walletMiddleware({ walletId: process.env.BYO_WALLET_ID }),
+  payMiddleware({ price: '0.00', acceptSessions: true }),
+  vaultMiddleware(),
+  async (req, res) => {
+    const vault = req.vault!;
+
+    // Persist before sealing — keeps vault alive after session expires
+    await vault.persist();
+    await vault.seal('Agent session complete');
+
+    const manifest = await vault.getManifest();
+
+    res.json({
+      vaultId:   vault.id,
+      status:    'complete',
+      documents: manifest.documents,
+      files:     manifest.files,
+    });
+  }
+);
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+# Step 1: First request — creates session (pays with stub mode)
+curl -i -X POST http://localhost:4004/agent/step \
+  -H "Content-Type: application/json" \
+  -H "X-PAYMENT: stub_payment_accepted" \
+  -d '{"step": "search", "query": "latest AI papers"}'
+```
+
+Response (note the X-PRUDRA-SESSION-ID header):
+
+```
+HTTP/1.1 200 OK
+X-PRUDRA-SESSION-ID: sess_clx1abc123
+Content-Type: application/json
+
+{
+  "vaultId": "vlt_clx1def456",
+  "sessionId": "sess_clx1abc123",
+  "step": "search",
+  "result": { "step": "search", "query": "latest AI papers", "output": "Completed: search" }
+}
+```
+
+```bash
+# Step 2: Subsequent request — no payment needed, include session ID
+curl -X POST http://localhost:4004/agent/step \
+  -H "Content-Type: application/json" \
+  -H "X-PRUDRA-SESSION-ID: sess_clx1abc123" \
+  -d '{"step": "summarise", "query": "latest AI papers"}'
+```
+
+Response — same vaultId as step 1:
+
+```json
+{
+  "vaultId": "vlt_clx1def456",
+  "sessionId": "sess_clx1abc123",
+  "step": "summarise",
+  "result": { "step": "summarise", "output": "Completed: summarise" }
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Parameters
+
+### payMiddleware with sessions
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `price` | string | Yes | Payment amount in USD for the first request |
+| `description` | string | No | Human-readable description |
+| `acceptSessions` | boolean | Yes | Must be `true` to enable session payments |
+
+### Request headers
+
+| Header | Required | Description |
+|---|---|---|
+| `X-PRUDRA-SESSION-ID` | No | Include on subsequent requests to reuse an existing session |
+
+If `X-PRUDRA-SESSION-ID` is absent or invalid, the request is treated as a new payment request (402 is returned).
+
+## Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `vaultId` | string | The shared vault for this session. Same on every session request. |
+| `sessionId` | string | The session ID. Include in `X-PRUDRA-SESSION-ID` on subsequent requests. |
+
+The `X-PRUDRA-SESSION-ID` response header is also set on the first request.
+
+## Error handling
+
+| Error | Status | Cause |
+|---|---|---|
+| `session-not-found` | 402 | Session ID invalid or expired — agent must pay again |
+| `session-payments-not-available` | 429 | Hobby plan doesn't support session payments |
+| `vault-quota-exceeded` | 429 | Active vault limit reached |
+
+## Next steps
+
+- [Handle multi-step workflows](/payments/sessions/multi-step) — the full two-request session flow
+- [Session expiry and renewal](/payments/sessions/expiry) — default TTL and extending sessions
+- [Subscribe to vault events](/storage/events/subscribe) — watch session progress via SSE

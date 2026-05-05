@@ -1,0 +1,109 @@
+---
+title: "Persist a vault"
+description: "Extend vault lifetime beyond its TTL so contents survive past the default expiry."
+---
+
+## Persist a vault
+
+By default, vaults expire after their TTL (24 hours on Hobby, 7 days on Pro). Persisting a vault pauses the TTL countdown and keeps the vault accessible until you explicitly delete it or your persisted vault quota is reached.
+
+## When to persist
+
+- The caller needs to download results after the TTL expires
+- You want to archive payment results for compliance
+- A long-running job produces results that should outlive the default TTL
+
+## Persist a vault
+
+<Tabs>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { persistVault } from '@prudra/vault';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+await persistVault({ vaultId: 'vlt_clx1abc123' });
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X POST https://api.prudra.dev/vaults/vlt_clx1abc123/persist \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+{
+  "id":          "vlt_clx1abc123",
+  "status":      "persisted",
+  "persistedAt": "2026-04-30T09:05:00.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Persist from within your handler
+
+Persist during the request if you know in advance the vault should survive:
+
+```typescript
+app.post('/generate', walletMiddleware(...), payMiddleware(...), vaultMiddleware(), async (req, res) => {
+  const vault = req.vault!;
+
+  const report = await generateReport();
+  await vault.addDocument(report, 'Report');
+  await vault.seal('Report generated');
+
+  // Persist so caller can download even if they return hours later
+  await vault.persist();
+
+  res.json({ vaultId: vault.id });
+});
+```
+
+## Persisted vault quota
+
+Persisting consumes your persisted vault quota — separate from active vault quota:
+
+| Plan | Persisted vaults |
+|---|---|
+| Hobby | 1 |
+| Pro | 20 |
+| Enterprise | Unlimited |
+
+When the quota is full, `persistVault()` returns a `persisted-vault-quota-exceeded` error. Delete older persisted vaults to free quota.
+
+## Extending TTL without persisting
+
+If you want to extend the TTL without permanently persisting, use `extendVaultTtl()`:
+
+```typescript
+import { extendVaultTtl } from '@prudra/vault';
+
+await extendVaultTtl({
+  vaultId:  'vlt_clx1abc123',
+  ttlHours: 48,  // new TTL from now
+});
+```
+
+This pushes the expiry forward without consuming persisted vault quota.
+
+## Error handling
+
+| Error | Status | Cause | Resolution |
+|---|---|---|---|
+| `persisted-vault-quota-exceeded` | 429 | Persisted vault limit reached | Delete old persisted vaults |
+| `vault-already-persisted` | 409 | Already persisted | No action needed |
+| `vault-expired` | 404 | Vault already expired | Cannot persist expired vaults |
+
+## Related
+
+- [TTL and expiry](/storage/vaults/ttl-expiry) — how TTL works
+- [Delete a vault](/storage/vaults/delete) — free persisted vault quota
+- [Vault quota](/storage/vaults/quota) — check current usage

@@ -1,0 +1,47 @@
+---
+title: Tokens
+description: ERC-20 symbols and identifiers for transfers and managed wallets — validated combinations per chain.
+---
+
+## Overview
+
+Token identifiers in Prudra are **string symbols** such as `USDC`, `USDT`, `USDC_E`, `DAI`, and native `ETH` where applicable. The server resolves each `(chain, token)` pair to a contract address and decimals. If a pair is not configured, the API returns a validation error before signing.
+
+## Common tokens
+
+| Symbol | Typical usage |
+| --- | --- |
+| `USDC` | USD Coin on EVM L1/L2s. |
+| `USDT` | Tether. |
+| `USDC_E` | Bridged / tempo-specific USDC variant (see Tempo docs). |
+| `DAI` | MakerDAO stablecoin. |
+| `ETH` | Native gas token for EVM chains. |
+
+Exact availability depends on the chain. Always rely on server validation rather than assuming a symbol works everywhere.
+
+## SDK
+
+`@prudra/core` exports `Token` and type `TokenType`:
+
+```typescript
+import { Token } from '@prudra/core';
+
+await transferManagedTokens({
+  fromToken: Token.USDC,
+  toToken: Token.USDT,
+  // ...
+});
+```
+
+## API validation
+
+Transfer and withdrawal bodies include `fromToken`, `toToken`, or `token` fields. Prudra checks:
+
+1. Chain is supported.
+2. Token contract exists for that chain.
+3. Amount parses as a non-negative decimal string compatible with token decimals.
+
+## Related
+
+- [Chains](/concepts/chains) — network slugs.
+- [Token transfers](/concepts/token-transfers) — routing and fees.

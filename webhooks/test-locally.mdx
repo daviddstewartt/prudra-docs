@@ -1,0 +1,128 @@
+---
+title: "Test locally"
+description: "Receive Prudra webhooks in local development using ngrok or a similar tunnel."
+---
+
+## Test locally
+
+Prudra webhooks require a publicly reachable HTTPS endpoint. In local development, use ngrok to expose your local server via a public tunnel URL.
+
+## Setup with ngrok
+
+```bash
+# 1. Install ngrok
+brew install ngrok   # macOS
+# or download from https://ngrok.com/download
+
+# 2. Start your local server
+npx tsx example-05-webhooks.ts
+# Server running on :4005
+
+# 3. In a new terminal, start ngrok
+ngrok http 4005
+# Forwarding: https://abc123.ngrok-free.app -> http://localhost:4005
+
+# 4. Register the ngrok URL as your webhook endpoint
+curl -X POST https://api.prudra.dev/webhooks \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url":    "https://abc123.ngrok-free.app/webhooks/prudra",
+    "events": ["*"]
+  }'
+
+# Save the returned secret
+export PRUDRA_WEBHOOK_SECRET=whsec_...
+```
+
+## Triggering test events
+
+Trigger a payment to generate a `payment.received` webhook:
+
+```bash
+# 1. Make a payment (stub mode)
+curl -X POST http://localhost:4005/your-endpoint \
+  -H "X-PAYMENT: stub_payment_accepted" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# 2. Watch your terminal for the webhook delivery
+# [Webhook] Received: payment.received (evt_clx1abc123)
+```
+
+## Webhook receiver example
+
+The full webhook server from example-05:
+
+```typescript
+import express    from 'express';
+import { verifyWebhook } from '@prudra/webhooks';
+
+const app = express();
+
+app.post(
+  '/webhooks/prudra',
+  express.raw({ type: '*/*' }),
+  async (req, res) => {
+    res.sendStatus(200);
+
+    const isValid = verifyWebhook({
+      payload:   req.body as Buffer,
+      signature: req.headers['x-prudra-signature'] as string,
+      timestamp: req.headers['x-prudra-timestamp'] as string,
+      secret:    process.env.PRUDRA_WEBHOOK_SECRET!,
+    });
+
+    if (!isValid) {
+      console.warn('[Webhook] Invalid signature');
+      return;
+    }
+
+    const event = JSON.parse((req.body as Buffer).toString());
+    console.log(`[Webhook] ${event.type} (${event.eventId})`);
+
+    switch (event.type) {
+      case 'payment.received':
+        console.log('  Amount:', event.payload.amount);
+        break;
+      case 'vault.sealed':
+        console.log('  Summary:', event.payload.summary);
+        break;
+    }
+  }
+);
+
+app.use(express.json());
+app.listen(4005);
+```
+
+## Replay deliveries
+
+If you miss a webhook (e.g., ngrok wasn't running), replay it from the API:
+
+```bash
+# List recent delivery attempts
+curl "https://api.prudra.dev/webhooks/wh_clx1abc123/attempts" \
+  -H "Authorization: Bearer prv_test_sk_..."
+
+# Replay a specific delivery
+curl -X POST https://api.prudra.dev/webhooks/wh_clx1abc123/replay \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -d '{ "deliveryId": "del_clx1abc123" }'
+```
+
+## Updating your URL
+
+When ngrok restarts, it generates a new URL. Update your webhook URL:
+
+```bash
+curl -X PATCH https://api.prudra.dev/webhooks/wh_clx1abc123 \
+  -H "Authorization: Bearer prv_test_sk_..." \
+  -d '{ "url": "https://new-url.ngrok-free.app/webhooks/prudra" }'
+```
+
+## Related
+
+- [Verify signatures](/webhooks/verify-signatures) — HMAC verification
+- [Retry behaviour](/webhooks/retry-behaviour) — replay failed deliveries
+- [Event reference](/webhooks/event-reference) — all webhook event types

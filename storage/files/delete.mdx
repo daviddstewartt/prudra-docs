@@ -1,0 +1,78 @@
+---
+title: "Delete files"
+description: "Remove individual files from a vault to free storage quota."
+---
+
+## Delete files
+
+Delete an individual file from a vault without deleting the entire vault. Deletion removes the file from GCS and invalidates the CDN URL.
+
+<Tabs>
+  <Tab title="SDK">
+
+```typescript
+import { initialise } from '@prudra/core';
+import { deleteVaultFile } from '@prudra/vault';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+await deleteVaultFile({
+  vaultId: 'vlt_clx1abc123',
+  fileId:  'fil_clx1abc123',
+});
+
+console.log('File deleted — CDN URL is now invalid');
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+curl -X DELETE \
+  https://api.prudra.dev/vaults/vlt_clx1abc123/files/fil_clx1abc123 \
+  -H "Authorization: Bearer prv_test_sk_..."
+```
+
+Response:
+
+```json
+{
+  "id":        "fil_clx1abc123",
+  "deleted":   true,
+  "deletedAt": "2026-04-30T09:10:00.000Z"
+}
+```
+
+  </Tab>
+</Tabs>
+
+## What deletion does
+
+- Removes the file object from GCS immediately
+- CDN cache is invalidated within minutes
+- File record removed from vault manifest
+- Storage quota is freed
+
+Deletion is permanent. There is no recovery path.
+
+## Deleting from a sealed vault
+
+You can delete files from sealed vaults. The vault remains sealed — only the file is removed:
+
+```typescript
+// Works even after seal
+await deleteVaultFile({ vaultId: 'vlt_clx1abc123', fileId: 'fil_clx1abc123' });
+```
+
+## Error handling
+
+| Error | Status | Cause | Resolution |
+|---|---|---|---|
+| `file-not-found` | 404 | File ID doesn't exist or already deleted | No action needed |
+| `vault-expired` | 404 | Vault has expired (files already gone) | No action needed |
+
+## Related
+
+- [Upload files](/storage/files/upload) — add files to a vault
+- [Download files](/storage/files/download) — CDN URL details
+- [Delete a vault](/storage/vaults/delete) — delete the entire vault and all files

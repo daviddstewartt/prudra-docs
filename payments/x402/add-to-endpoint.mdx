@@ -1,0 +1,125 @@
+---
+title: "Add x402 to an endpoint"
+description: "Configure payMiddleware to accept x402 payments on a specific route."
+---
+
+## Add x402 to an endpoint
+
+`payMiddleware` accepts x402 by default as part of its dual-protocol behaviour. The standard configuration works with all x402-compatible agents without any additional options.
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard support for managing paid endpoints is coming soon. Use the SDK to configure x402 on your routes.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+**Minimal setup (dual-protocol — recommended):**
+
+```typescript
+import express from 'express';
+import { initialise } from '@prudra/core';
+import { walletMiddleware, payMiddleware, vaultMiddleware } from '@prudra/express';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const app = express();
+app.use(express.json());
+app.use(walletMiddleware({ walletId: process.env.BYO_WALLET_ID }));
+
+app.post(
+  '/analyse',
+  payMiddleware({ price: '0.05', description: 'Document analysis' }),
+  vaultMiddleware(),
+  async (req, res) => {
+    // req.payment.protocol will be 'x402' if the agent paid with x402
+    console.log('Paid via:', req.payment!.protocol);
+    
+    await req.vault!.addDocument({ result: 'analysis done' }, 'Result');
+    await req.vault!.seal('Complete');
+    
+    res.json({ vaultId: req.vault!.id, protocol: req.payment!.protocol });
+  }
+);
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+# Test without payment — see the PAYMENT-REQUIRED header in the 402
+curl -i -X POST http://localhost:4001/analyse \
+  -H "Content-Type: application/json" \
+  -d '{"text": "analyse this"}'
+
+# Test with stub payment (PAYMENT_STUB_MODE=true required on server)
+curl -X POST http://localhost:4001/analyse \
+  -H "Content-Type: application/json" \
+  -H "X-PAYMENT: stub_payment_accepted" \
+  -d '{"text": "analyse this"}'
+```
+
+  </Tab>
+</Tabs>
+
+## What the 402 response looks like
+
+When a request arrives without payment, `payMiddleware` returns:
+
+```
+HTTP/1.1 402 Payment Required
+PAYMENT-REQUIRED: eyJwcmljZSI6IjAuMDUiLCJjdXJyZW5jeSI6IlVTREMi...
+WWW-Authenticate: Payment id="ch_abc123", realm="your-api.com", ...
+Cache-Control: no-store
+Content-Type: application/problem+json
+
+{
+  "type": "https://api.prudra.dev/problems/payment-required",
+  "title": "Payment Required",
+  "status": 402,
+  "detail": "See WWW-Authenticate (MPP) or PAYMENT-REQUIRED (x402)."
+}
+```
+
+The `PAYMENT-REQUIRED` header is the x402 challenge. An x402 agent decodes it, signs an ERC-3009 authorization, and resubmits with `PAYMENT-SIGNATURE`.
+
+## What the 200 response includes
+
+After successful x402 payment:
+
+```json
+{
+  "vaultId": "vlt_clx1abc123",
+  "result": "...",
+  "payment": {
+    "protocol": "x402",
+    "amount": "0.05",
+    "txHash": "0xabc..."
+  }
+}
+```
+
+The response also includes the `PAYMENT-RESPONSE` header with settlement details — see [Handle the payment response](/payments/x402/handle-response).
+
+## payMiddleware options
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `price` | string | Yes | Payment amount in USD. e.g. `"0.05"` |
+| `description` | string | No | Human-readable description of the endpoint |
+| `acceptSessions` | boolean | No | Enable session payments (MPP only). Default: `false` |
+
+## Error handling
+
+| Error | Status | Cause |
+|---|---|---|
+| `payment-verification-failed` | 402 | Invalid signature or expired credential |
+| `duplicate-payment` | 409 | Same nonce used twice (replay attack blocked) |
+| `challenge-rate-limit` | 429 | More than 20 challenge requests/IP/60s |
+
+## Next steps
+
+- [Test x402 payments](/payments/x402/test) — test the full x402 flow with a real signing script
+- [Handle the payment response](/payments/x402/handle-response) — decode the PAYMENT-RESPONSE header
+- [How x402 works](/payments/x402/how-it-works) — the ERC-3009 flow in depth

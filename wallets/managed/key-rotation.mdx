@@ -1,0 +1,58 @@
+---
+title: "Key rotation"
+description: "How KEK rotation works, what keyVersion tracks, and why rotating doesn't interrupt service."
+---
+
+## Key rotation
+
+Prudra automatically rotates the key encryption key (KEK) every 90 days. Rotation re-encrypts all wallet private key ciphertexts with the new KEK. This happens in the background — there is no service interruption.
+
+## What rotation means for envelope encryption
+
+The KEK encrypts the wallet private keys (which are the data encryption keys, or DEKs). When the KEK rotates:
+
+1. A new KEK version is created in KMS hardware
+2. Each `encryptedPrivateKey` ciphertext in the `OrganisationWalletKey` table is decrypted with the old KEK
+3. The plaintext is immediately re-encrypted with the new KEK
+4. The new ciphertext replaces the old one
+5. `keyVersion` is updated to reference the new KEK version
+6. The old KEK version is retired
+
+The wallet private keys themselves do not change. The wallet addresses do not change. Only the encryption layer rotates.
+
+## Why old data still decrypts after rotation
+
+The re-encryption job processes all records before the old KEK is retired. During the re-encryption window, both KEK versions are valid. After re-encryption completes, all records reference the new KEK and the old KEK is deactivated.
+
+If a signing operation occurs during re-encryption, Prudra checks `keyVersion` on the `OrganisationWalletKey` record to determine which KEK version to use for decryption.
+
+## The keyVersion field
+
+```typescript
+const wallet = await getWallet('mwt_clx1abc123');
+console.log(wallet.keyVersion); // "v1_1746000000000"
+```
+
+`keyVersion` is an opaque string — it does not directly reference KMS internals. It's updated whenever the re-encryption job processes a record. You don't need to store or act on this field; it's informational.
+
+## Rotation schedule
+
+| Key type | Rotation schedule |
+|---|---|
+| KEK (Key Encryption Key) | Every 90 days, automatic |
+| Signing keys (fee payer) | Every 30 days, automatic |
+
+Manual rotation is not currently supported. If you need emergency key rotation (e.g., suspected KEK compromise), contact [support@prudra.com](mailto:support@prudra.com).
+
+## Impact on operations
+
+During KEK rotation:
+- **Payments**: Not affected. Signature verification uses the wallet's public key, not the private key.
+- **Transfers and withdrawals**: A brief delay may occur if a signing operation coincides with re-encryption. Prudra retries signing operations automatically.
+- **Balance queries**: Not affected (no signing required).
+
+## Related
+
+- [How managed wallets work](/wallets/managed/how-it-works) — envelope encryption model
+- [Key custody and recovery](/platform/security/key-custody) — the full custody model, audit logs, recovery
+- [Supported chains and tokens](/wallets/managed/supported-chains) — chain configuration

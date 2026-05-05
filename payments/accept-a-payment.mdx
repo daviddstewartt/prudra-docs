@@ -1,0 +1,176 @@
+---
+title: "Accept a payment"
+description: "Add the walletMiddleware + payMiddleware + vaultMiddleware chain to an Express endpoint."
+---
+
+## Accept a payment
+
+The core Prudra integration is three middleware functions chained together on any Express route. `walletMiddleware` identifies which wallet receives payment. `payMiddleware` handles the 402 challenge and verification. `vaultMiddleware` creates the vault where your handler stores its output.
+
+<Tabs>
+  <Tab title="Dashboard">
+    <Note>
+      Dashboard support for managing paid endpoints is coming soon. Use the SDK or cURL to set up payment-gated routes.
+    </Note>
+  </Tab>
+  <Tab title="SDK">
+
+```typescript
+import express from 'express';
+import { initialise } from '@prudra/core';
+import {
+  walletMiddleware,
+  payMiddleware,
+  vaultMiddleware,
+} from '@prudra/express';
+
+initialise({ apiKey: process.env.PRUDRA_API_KEY! });
+
+const app = express();
+app.use(express.json());
+
+// Register the wallet that receives payments (applies to all routes)
+app.use(walletMiddleware({ walletId: process.env.BYO_WALLET_ID }));
+
+app.post(
+  '/analyse',
+  payMiddleware({ price: '0.05', description: 'Document analysis' }),
+  vaultMiddleware(),
+  async (req, res) => {
+    const { document } = req.body as { document: string };
+
+    // req.payment is set after successful payment
+    console.log('Payment received:', req.payment!.protocol, req.payment!.amount);
+
+    // req.vault is set by vaultMiddleware
+    const analysis = { wordCount: document.split(' ').length, sentiment: 'positive' };
+
+    await req.vault!.addDocument(analysis, 'Analysis result');
+    await req.vault!.seal('Analysis complete');
+
+    res.json({
+      vaultId:  req.vault!.id,
+      analysis,
+      payment: {
+        protocol: req.payment!.protocol,
+        txHash:   req.payment!.txHash,
+      },
+    });
+  }
+);
+
+app.listen(4001);
+```
+
+  </Tab>
+  <Tab title="cURL">
+
+```bash
+# Without payment — returns 402 with both challenge headers
+curl -i -X POST http://localhost:4001/analyse \
+  -H "Content-Type: application/json" \
+  -d '{"document": "This is the document to analyse."}'
+
+# With stub payment (development only)
+curl -X POST http://localhost:4001/analyse \
+  -H "Content-Type: application/json" \
+  -H "X-PAYMENT: stub_payment_accepted" \
+  -d '{"document": "This is the document to analyse."}'
+```
+
+Response (200):
+
+```json
+{
+  "vaultId": "vlt_clx1abc123",
+  "analysis": {
+    "wordCount": 7,
+    "sentiment": "positive"
+  },
+  "payment": {
+    "protocol": "mpp",
+    "txHash": "stub_0xabc123"
+  }
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Middleware parameters
+
+### walletMiddleware
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `walletId` | string | Yes | The ID of the wallet that receives payment. BYO wallets: `byw_...`. Managed wallets: `mwt_...`. |
+
+You can mount `walletMiddleware` globally (for all routes) or per-route. If mounted globally, it runs once for all routes. If mounted per-route, you can use different wallets for different endpoints.
+
+### payMiddleware
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `price` | string | Yes | The payment amount in USD. e.g. `"0.01"` for $0.01. |
+| `description` | string | No | Human-readable description shown in payment UIs. |
+| `acceptSessions` | boolean | No | Enable session payments. Requires Pro plan. Default: `false`. |
+
+### vaultMiddleware
+
+No required parameters. The vault is created automatically and attached to `req.vault`.
+
+## What gets set on `req`
+
+After the middleware chain runs, your handler has access to:
+
+| Property | Type | Description |
+|---|---|---|
+| `req.payment` | object | Payment details: `protocol`, `amount`, `txHash`, `vaultId`, `paymentId`, `sessionId` |
+| `req.vault` | Vault | The vault instance. Call `.addDocument()`, `.addFile()`, `.emit()`, `.seal()`, `.persist()` |
+| `req.wallet` | object | The wallet that received payment: `id`, `address`, `chain` |
+| `req.sessionId` | string \| undefined | Set when the request is part of a session |
+
+## The vault in your handler
+
+The vault attached to `req.vault` is ready to use immediately. Common operations:
+
+```typescript
+// Add a structured JSON document
+await req.vault!.addDocument(
+  { result: 'some data', processedAt: new Date() },
+  'Document name'
+);
+
+// Upload a binary file
+await req.vault!.addFile(
+  fileBuffer,
+  'output.pdf',
+  'application/pdf'
+);
+
+// Emit a real-time event (subscribers see this via SSE)
+await req.vault!.emit('progress', { percent: 50, message: 'Halfway done' });
+
+// Seal the vault (read-only permanently)
+await req.vault!.seal('Work complete');
+
+// Get the full manifest (all documents + files with URLs)
+const manifest = await req.vault!.getManifest();
+```
+
+## Error handling
+
+| Error | HTTP status | Cause | Resolution |
+|---|---|---|---|
+| `payment-required` | 402 | No payment credential in request | Expected — agent must pay |
+| `payment-verification-failed` | 402 | Invalid payment credential | Agent's signature or tx invalid |
+| `duplicate-payment` | 409 | Same `txHash` used twice | Replay attack prevented |
+| `vault-quota-exceeded` | 429 | Active vault limit reached | Seal existing vaults or upgrade |
+| `challenge-rate-limit` | 429 | Too many challenges from this IP | Wait 60 seconds |
+
+## Next steps
+
+- [How x402 works](/payments/x402/how-it-works) — deep dive on the ERC-3009 signing flow
+- [How MPP works](/payments/mpp/how-it-works) — the Tempo transaction and challenge verification
+- [Add session payments](/payments/sessions/add) — one payment per multi-step workflow
+- [Add documents to a vault](/storage/vaults/add-documents) — all vault document options
